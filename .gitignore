@@ -1,0 +1,21 @@
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+
+# Local AI tooling
+.claude/
+
+# Future tooling (node-based lint/test/build)
+node_modules/
+dist/
+*.log
+
+# Local experiments / scratch
+scratch/
+*.local.*

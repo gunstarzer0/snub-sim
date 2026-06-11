@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SNUB FORCE — Hydraulic Workover Arcade</title>
+<style>
+  :root{
+    --acc:#ff8c1a; --acc2:#ffb45e; --ok:#3ddc7a; --warn:#ffd23d; --bad:#ff4d4d;
+    --panel:rgba(10,16,24,.78); --line:rgba(255,140,26,.35); --txt:#dfe8f2;
+  }
+  *{box-sizing:border-box; -webkit-user-select:none; user-select:none;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f16;font-family:"Segoe UI",system-ui,sans-serif;color:var(--txt);}
+  #scene{position:fixed;inset:0;}
+  canvas{display:block;}
+  .mono{font-family:Consolas,"Cascadia Mono",monospace;}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.45);}
+  /* top bar */
+  #topbar{top:10px;left:50%;transform:translateX(-50%);display:flex;gap:18px;align-items:center;
+    padding:8px 18px;white-space:nowrap;z-index:5;}
+  #topbar .ttl{font-weight:800;letter-spacing:2px;color:var(--acc);font-size:15px;}
+  #topbar .stat{font-size:13px;opacity:.9;}
+  #topbar .stat b{color:#fff;font-size:15px;}
+  #sndBtn,#pauseBtn{background:none;border:1px solid var(--line);color:var(--txt);border-radius:8px;
+    padding:4px 10px;cursor:pointer;font-size:15px;}
+  #sndBtn:hover,#pauseBtn:hover{border-color:var(--acc);}
+  #hudObj{color:var(--acc2);font-weight:700;}
+  /* left diagram */
+  #diagPanel{left:12px;top:70px;padding:8px;z-index:4;}
+  #diagPanel h4{margin:0 0 6px;font-size:11px;letter-spacing:1.5px;color:var(--acc2);text-align:center;}
+  /* right gauge + controls */
+  #rightCol{right:12px;top:70px;width:252px;display:flex;flex-direction:column;gap:10px;z-index:4;position:fixed;}
+  .panel-inner{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.45);padding:10px;}
+  .panel-inner h4{margin:0 0 6px;font-size:11px;letter-spacing:1.5px;color:var(--acc2);}
+  #gaugeWrap{text-align:center;}
+  #sealBar{height:10px;border-radius:5px;background:#222b36;overflow:hidden;margin-top:6px;}
+  #sealFill{height:100%;width:100%;background:linear-gradient(90deg,#3ddc7a,#9fe870);transition:width .2s;}
+  .row{display:flex;gap:6px;margin-top:6px;}
+  .seg{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{flex:1;background:transparent;border:none;color:var(--txt);padding:7px 2px;cursor:pointer;
+    font-size:11px;font-weight:700;letter-spacing:.5px;}
+  .seg button.on{background:var(--acc);color:#14100a;}
+  .btn{background:#1a2330;border:1px solid var(--line);color:var(--txt);border-radius:8px;
+    padding:9px 4px;cursor:pointer;font-weight:700;font-size:12px;letter-spacing:.4px;flex:1;}
+  .btn:hover{border-color:var(--acc);}
+  .btn:active,.btn.held{background:var(--acc);color:#14100a;}
+  .btn.engaged{background:#2c7a4b;border-color:#3ddc7a;color:#eafff2;}
+  .btn:disabled{opacity:.35;cursor:default;}
+  .btn.big{padding:12px;font-size:14px;}
+  .btn.run-on{background:var(--bad);border-color:#ff8080;color:#fff;}
+  .kbd{opacity:.55;font-size:10px;font-weight:400;}
+  #forceRead{display:flex;justify-content:space-between;font-size:11px;margin-top:6px;}
+  #lhBadge{margin-top:6px;text-align:center;font-weight:800;font-size:12px;letter-spacing:1px;
+    border-radius:6px;padding:4px;background:#173247;color:#7ec8ff;}
+  #lhBadge.heavy{background:#3a2c14;color:#ffb45e;}
+  /* toast */
+  #toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);padding:8px 22px;border-radius:8px;
+    background:rgba(20,10,5,.85);border:1px solid var(--bad);color:#ffd9d9;font-weight:700;letter-spacing:.5px;
+    font-size:14px;opacity:0;transition:opacity .15s;z-index:6;pointer-events:none;text-align:center;}
+  #toast.show{opacity:1;}
+  #toast.info{border-color:var(--acc);color:#ffe9cf;}
+  /* hint bar */
+  #hintbar{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:11px;opacity:.55;
+    z-index:4;white-space:nowrap;}
+  /* overlays */
+  .ovl{position:fixed;inset:0;background:rgba(5,8,13,.82);display:flex;align-items:center;justify-content:center;
+    z-index:20;backdrop-filter:blur(4px);}
+  .card{background:#101824;border:1px solid var(--line);border-radius:14px;padding:28px 34px;max-width:560px;
+    text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;color:var(--acc);letter-spacing:4px;font-size:30px;}
+  .card h2{margin:0 0 12px;font-size:14px;font-weight:400;opacity:.8;}
+  .card p{font-size:13px;line-height:1.55;opacity:.85;text-align:left;}
+  .card .ctl{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;text-align:left;
+    margin:12px 0;opacity:.9;}
+  .card .ctl b{color:var(--acc2);}
+  .card button{margin-top:14px;background:var(--acc);color:#14100a;border:none;border-radius:10px;
+    padding:12px 38px;font-size:16px;font-weight:800;letter-spacing:1px;cursor:pointer;}
+  .card button:hover{background:var(--acc2);}
+  .card button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);}
+  .card button.ghost:hover{border-color:var(--acc);background:rgba(255,140,26,.12);}
+  .card .btnrow{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  #tutBody{font-size:13px;line-height:1.65;text-align:left;min-height:130px;}
+  #tutBody b{color:var(--acc2);}
+  #tutDots{margin-top:10px;letter-spacing:8px;font-size:13px;color:#3b4a5c;}
+  #tutDots .on{color:var(--acc);}
+  .hidden{display:none !important;}
+  #failReason{color:var(--bad);font-weight:700;font-size:16px;margin:8px 0;}
+  #winStats{font-size:14px;margin:8px 0;color:var(--ok);font-weight:700;}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="topbar" class="panel">
+  <span class="ttl">⛽ SNUB FORCE</span>
+  <span class="stat">LEVEL <b id="hudLvl">1</b></span>
+  <span class="stat">SCORE <b id="hudScore" class="mono">0</b></span>
+  <span class="stat">DEPTH <b id="hudDepth" class="mono">0</b> ft</span>
+  <span class="stat">JOINTS <b id="hudJoints" class="mono">0/8</b></span>
+  <span class="stat" id="hudObj">SNUB IN → 240 ft</span>
+  <button id="pauseBtn" title="Pause (Esc)">⏸</button>
+  <button id="sndBtn" title="Toggle sound (M)">🔊</button>
+</div>
+
+<div id="diagPanel" class="panel">
+  <h4>WELL DIAGRAM</h4>
+  <canvas id="diag" width="150" height="430"></canvas>
+</div>
+
+<div id="rightCol">
+  <div class="panel-inner" id="gaugeWrap">
+    <h4>WELLHEAD PRESSURE</h4>
+    <canvas id="gauge" width="230" height="150"></canvas>
+    <div class="row">
+      <button class="btn" id="btnBleed">BLEED ▼ <span class="kbd">[B]</span></button>
+      <button class="btn" id="btnPump">PUMP ▲ <span class="kbd">[P]</span></button>
+    </div>
+    <h4 style="margin-top:10px;">ANNULAR SEAL</h4>
+    <div id="sealBar"><div id="sealFill"></div></div>
+    <div id="forceRead" class="mono">
+      <span id="fUp" style="color:#7ec8ff;">↑ 0.0 klb</span>
+      <span id="fDn" style="color:#ffb45e;">↓ 0.0 klb</span>
+    </div>
+    <div id="lhBadge">▲ PIPE LIGHT — SNUBBING</div>
+  </div>
+
+  <div class="panel-inner">
+    <h4>RIG CONTROLS</h4>
+    <div class="row">
+      <div class="seg" id="segMode">
+        <button id="modeMan" class="on">MANUAL</button>
+        <button id="modeAuto">AUTO</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="seg" id="segDir">
+        <button id="dirIn" class="on">SNUB IN ▼</button>
+        <button id="dirOut">TRIP OUT ▲</button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn big" id="btnRun" disabled>▶ RUN AUTO CYCLE</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnJackUp">JACK ▲ <span class="kbd">[W]</span></button>
+      <button class="btn" id="btnJackDn">JACK ▼ <span class="kbd">[S]</span></button>
+    </div>
+    <div class="row">
+      <button class="btn engaged" id="btnStat">STATIONARY SLIPS <span class="kbd">[Q]</span></button>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnTrav">TRAVELING SLIPS <span class="kbd">[E]</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="hintbar">Drag to orbit · Scroll to zoom · W/S jack · Q/E slips · B bleed · P pump · M sound</div>
+
+<div class="ovl" id="ovlTitle">
+  <div class="card">
+    <h1>SNUB FORCE</h1>
+    <h2>Hydraulic Workover Arcade — strip pipe into a live well</h2>
+    <p>The well is <b>under pressure</b> and wants to launch your pipe out of the hole. Use the hydraulic
+    jack and two sets of slips to <b>snub pipe in</b> against wellbore pressure, while keeping wellhead
+    pressure in the green band — bleed off surge as you strip in, but don't swab it down into a kick.</p>
+    <div class="ctl">
+      <span><b>W / S</b> — jack extend / retract</span>
+      <span><b>Q</b> — stationary slips</span>
+      <span><b>E</b> — traveling slips</span>
+      <span><b>B / P</b> — bleed / pump pressure</span>
+      <span><b>AUTO mode</b> — rig sequences slips & jack for you; you manage pressure</span>
+      <span><b>Golden ring</b> — neutral point: above it the pipe is LIGHT (it ejects if nothing grips it!)</span>
+    </div>
+    <p style="text-align:center;opacity:.7;">Manual cycle (snub in): jack up empty → grip TRAVELING → release STATIONARY → jack down → set STATIONARY → release TRAVELING → repeat.</p>
+    <div class="btnrow">
+      <button id="btnStart">START SHIFT</button>
+      <button id="btnTut" class="ghost">📖 TUTORIAL</button>
+      <button id="btnContinue" class="ghost hidden">CONTINUE</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl hidden" id="ovlFail">
+  <div class="card">
+    <h1 style="color:var(--bad);">WELL CONTROL LOST</h1>
+    <div id="failReason"></div>
+    <p style="text-align:center;">Final score: <b id="failScore" class="mono">0</b></p>
+    <button id="btnRetry">RETRY LEVEL</button>
+  </div>
+</div>
+
+<div class="ovl hidden" id="ovlWin">
+  <div class="card">
+    <h1 style="color:var(--ok);" id="winTitle">PIPE ON BOTTOM ✔</h1>
+    <div id="winStats"></div>
+    <p style="text-align:center;opacity:.8;">Next well is hotter — higher pressure, deeper target.</p>
+    <button id="btnNext">NEXT WELL</button>
+  </div>
+</div>
+
+<div class="ovl hidden" id="ovlPause">
+  <div class="card">
+    <h1 style="font-size:24px;">PAUSED</h1>
+    <p style="text-align:center;opacity:.8;" id="pauseInfo"></p>
+    <div class="btnrow">
+      <button id="btnResume">▶ RESUME</button>
+      <button id="btnRestartLvl" class="ghost">↺ RESTART LEVEL</button>
+      <button id="btnQuit" class="ghost">QUIT TO TITLE</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl hidden" id="ovlTut">
+  <div class="card" style="max-width:520px;">
+    <h1 style="font-size:20px;letter-spacing:2px;" id="tutTitle"></h1>
+    <div id="tutBody"></div>
+    <div id="tutDots"></div>
+    <div class="btnrow">
+      <button id="tutBack" class="ghost">◀ BACK</button>
+      <button id="tutNext">NEXT ▶</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   SNUB FORCE — single-file prototype
+   Sections: 1 CONFIG/LEVELS · 2 AUDIO · 3 STATE · 4 3D SCENE ·
+   5 PARTICLES · 6 HUD · 7 INPUT · 8 GAME FLOW · 9 AUTO SEQUENCER ·
+   10 SIMULATION · 11 RENDER LOOP
+   Physics is arcade-simplified but internally consistent:
+     up-force (klb)  = P(psi) * pipe.area(in²) / 1000
+     string wt (klb) = depth(ft) * pipe.weight(lb/ft) / 1000
+     neutral point   = depth where they cross = P * area / weight
+   Pipe weights are gameplay-tuned (heavier than spec) so the
+   neutral point lands inside playable depths.
+   ============================================================ */
+
+/* ============ 1. CONFIG & LEVELS ============ */
+const STROKE = 10;          // jack stroke, ft
+const JOINT  = 30;          // ft per joint
+const JACK_SPD_MAN  = 8;    // ft/s
+const JACK_SPD_AUTO = 9;
+const SLIP_TIME = 0.35;     // s to set/pull slips
+const SURGE_K = 3.6;        // psi per ft moved, per in² of pipe area
+const BLEED_RATE = 230, PUMP_RATE = 170;
+const Y_SCALE = 0.3;        // world units per ft (surface equipment)
+const CUT_TOP = -1.0, CUT_BOT = -14.0;   // cutaway window (world y)
+const EARTH_D = 15;         // cutaway depth, world units
+
+// pipe presets: weight drives string weight, area drives both well
+// force and surge/swab magnitude (bigger pipe displaces more fluid)
+const PIPES = {
+  hw238: { label:'2-3/8" heavy-wall workstring', weight:18.0, area:4.43 },
+  hw278: { label:'2-7/8" heavy-wall workstring', weight:26.5, area:6.49 },
+  ws350: { label:'3-1/2" big-bore workstring',   weight:30.0, area:9.62 },
+};
+
+const SCORE_DEF = { joint:100, level:500, sealMult:5, parTime:600 };
+
+// objective: 'snub-in' (reach target depth) | 'trip-out' (pull string
+// from startDepth to surface) | 'mixed' (snub to target, then trip out)
+// events: t = level time (s); a 3s warning toast precedes each one
+const LEVELS = [
+  { name:'First Snub', objective:'snub-in', p0:700, target:240, startDepth:0,
+    pipe:'hw238', drift:5, events:[], scoring:{} },
+
+  { name:'Pull the String', objective:'trip-out', p0:650, target:0, startDepth:270,
+    pipe:'hw238', drift:4,
+    events:[ {t:40, type:'gasPocket', dP:240, dur:3, warn:'GAS POCKET MIGRATING UP'} ],
+    scoring:{} },
+
+  { name:'Round Trip', objective:'mixed', p0:750, target:210, startDepth:0,
+    pipe:'hw278', drift:5,
+    events:[ {t:55,  type:'pressureDrop', dP:-220, dur:3, warn:'GAS SLUG PASSING — PRESSURE FALLING'},
+             {t:110, type:'gasPocket',    dP:260,  dur:3, warn:'GAS POCKET MIGRATING UP'} ],
+    scoring:{ parTime:700 } },
+
+  { name:'Sour Gas Surge', objective:'snub-in', p0:900, target:300, startDepth:0,
+    pipe:'hw278', drift:7,
+    events:[ {t:35,  type:'gasPocket', dP:280, dur:3,   warn:'H2S GAS POCKET RISING'},
+             {t:75,  type:'sandSlug',  seal:14,         warn:'SAND SLUG IN THE ANNULUS'},
+             {t:115, type:'gasPocket', dP:300, dur:2.5, warn:'SECOND GAS POCKET'} ],
+    scoring:{ joint:120 } },
+
+  { name:'Big Bore Blowdown', objective:'mixed', p0:1000, target:330, startDepth:0,
+    pipe:'ws350', drift:8,
+    events:[ {t:45,  type:'gasPocket',    dP:300,  dur:3, warn:'GAS POCKET MIGRATING UP'},
+             {t:95,  type:'sandSlug',     seal:16,        warn:'SAND SLUG IN THE ANNULUS'},
+             {t:150, type:'pressureDrop', dP:-260, dur:3, warn:'PRESSURE FALLING FAST'} ],
+    scoring:{ joint:150, level:800, parTime:800 } },
+];
+
+function getLevel(n){
+  if(n<=LEVELS.length) return LEVELS[n-1];
+  const extra=n-LEVELS.length;            // endless scaling past the table
+  return { name:'Deep Well '+n, objective: n%2 ? 'snub-in' : 'mixed',
+    p0:1000+extra*150, target:330+extra*45, startDepth:0, pipe:'ws350',
+    drift:8+extra, events:LEVELS[LEVELS.length-1].events,
+    scoring:{ joint:150, level:800, parTime:800 } };
+}
+
+/* ============ 2. AUDIO (all synthesized, no assets) ============ */
+const AudioFX = (() => {
+  let ctx=null, master=null, hydGain=null, hissGain=null, rumbleGain=null, alarmGain=null, alarmOsc=null;
+  let enabled = localStorage.getItem('sf_snd') !== '0';
+  function noiseBuf(c){
+    const b=c.createBuffer(1,c.sampleRate*2,c.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    return b;
+  }
+  function init(){
+    if(ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = enabled?0.5:0; master.connect(ctx.destination);
+    const nb = noiseBuf(ctx);
+    // hydraulic hum: looped noise -> bandpass
+    const hSrc=ctx.createBufferSource(); hSrc.buffer=nb; hSrc.loop=true;
+    const hF=ctx.createBiquadFilter(); hF.type='bandpass'; hF.frequency.value=190; hF.Q.value=2.5;
+    hydGain=ctx.createGain(); hydGain.gain.value=0;
+    hSrc.connect(hF).connect(hydGain).connect(master); hSrc.start();
+    // bleed hiss: noise -> highpass
+    const sSrc=ctx.createBufferSource(); sSrc.buffer=nb; sSrc.loop=true;
+    const sF=ctx.createBiquadFilter(); sF.type='highpass'; sF.frequency.value=3200;
+    hissGain=ctx.createGain(); hissGain.gain.value=0;
+    sSrc.connect(sF).connect(hissGain).connect(master); sSrc.start();
+    // rumble: noise -> lowpass
+    const rSrc=ctx.createBufferSource(); rSrc.buffer=nb; rSrc.loop=true;
+    const rF=ctx.createBiquadFilter(); rF.type='lowpass'; rF.frequency.value=90;
+    rumbleGain=ctx.createGain(); rumbleGain.gain.value=0;
+    rSrc.connect(rF).connect(rumbleGain).connect(master); rSrc.start();
+    // alarm
+    alarmOsc=ctx.createOscillator(); alarmOsc.type='square'; alarmOsc.frequency.value=680;
+    alarmGain=ctx.createGain(); alarmGain.gain.value=0;
+    alarmOsc.connect(alarmGain).connect(master); alarmOsc.start();
+  }
+  function env(g,t0,a,peak,d){ g.gain.cancelScheduledValues(t0); g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(peak,t0+a); g.gain.exponentialRampToValueAtTime(0.001,t0+a+d); }
+  function clack(){ if(!ctx)return; const t=ctx.currentTime;
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(2200,t);
+    o.frequency.exponentialRampToValueAtTime(300,t+0.07);
+    const g=ctx.createGain(); env(g,t,0.003,0.5,0.09); o.connect(g).connect(master); o.start(t); o.stop(t+0.12);
+    const o2=ctx.createOscillator(); o2.type='sine'; o2.frequency.value=95;
+    const g2=ctx.createGain(); env(g2,t,0.004,0.6,0.14); o2.connect(g2).connect(master); o2.start(t); o2.stop(t+0.18); }
+  function beep(f=880,dur=0.12,vol=0.3){ if(!ctx)return; const t=ctx.currentTime;
+    const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=f;
+    const g=ctx.createGain(); env(g,t,0.005,vol,dur); o.connect(g).connect(master); o.start(t); o.stop(t+dur+0.05); }
+  function chime(){ if(!ctx)return; [523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.22,0.32),i*90)); }
+  function fanfare(){ if(!ctx)return; [392,523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.3,0.32),i*110)); }
+  function boom(){ if(!ctx)return; const t=ctx.currentTime;
+    const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(120,t);
+    o.frequency.exponentialRampToValueAtTime(30,t+0.8);
+    const g=ctx.createGain(); env(g,t,0.01,0.9,1.2); o.connect(g).connect(master); o.start(t); o.stop(t+1.4); }
+  return {
+    init, clack, beep, chime, fanfare, boom,
+    setHyd(v){ if(hydGain) hydGain.gain.value = v*0.35; },
+    setHiss(v){ if(hissGain) hissGain.gain.value = v*0.25; },
+    setRumble(v){ if(rumbleGain) rumbleGain.gain.value = v*0.6; },
+    setAlarm(v){ if(alarmGain) alarmGain.gain.value = v*0.12; },
+    get enabled(){ return enabled; },
+    toggle(){ enabled=!enabled; localStorage.setItem('sf_snd',enabled?'1':'0');
+      if(master) master.gain.value = enabled?0.5:0; return enabled; }
+  };
+})();
+
+/* ============ 3. GAME STATE & DERIVED VALUES ============ */
+const st = {
+  playing:false, paused:false, level:1, score:0,
+  best:+(localStorage.getItem('sf_best')||0),
+  // level config (filled by startLevel)
+  p0:700, target:240, startDepth:0, objective:'snub-in',
+  pipe:PIPES.hw238, drift:5, surge:SURGE_K*PIPES.hw238.area,
+  scoring:SCORE_DEF, events:[], ramps:[],
+  // objective stage: 'in' = running toward target, 'out' = pulling to surface
+  stage:'in', stageStartDepth:0, mapDepth:240,
+  // pipe & rig
+  depth:0, jack:0, trav:false, stat:true, travAnim:0, statAnim:1,
+  mode:'manual', dir:1, autoRun:false, phase:'idle',
+  // well
+  P:700, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
+  // progress & fx
+  jointsDone:0, lastJoints:0, levelT:0, pipeV:0, lockWarnT:0,
+  failing:false, failAnimT:0, failReason:'', shake:0,
+  held:{up:false,dn:false,bleed:false,pump:false},
+};
+
+const upForce  = () => st.P * st.pipe.area / 1000;             // klb
+const stringWt = () => st.depth * st.pipe.weight / 1000;       // klb
+const npDepth  = () => st.P * st.pipe.area / st.pipe.weight;   // ft — same crossing as the forces
+const pipeLight= () => stringWt() < upForce();
+const travGrip = () => st.trav && st.travAnim > 0.85;
+const statGrip = () => st.stat && st.statAnim > 0.85;
+
+// progress within the current objective stage
+function stageInfo(){
+  const to = st.stage==='in' ? st.target : 0;
+  const total = Math.abs(to - st.stageStartDepth);
+  const prog  = Math.min(total, Math.abs(st.depth - st.stageStartDepth));
+  return { prog, total,
+    joints: Math.floor(prog/JOINT),
+    jointsTotal: Math.max(1, Math.ceil(total/JOINT)) };
+}
+
+/* ============ 4. 3D SCENE ============ */
+let wellGlowMat;            // pulsing pressure glow inside the wellbore slot
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+document.getElementById('scene').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x121b26, 55, 160);
+{ // dusk gradient sky
+  const c=document.createElement('canvas'); c.width=2; c.height=512;
+  const g=c.getContext('2d'), gr=g.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0,'#0b1322'); gr.addColorStop(.55,'#16283d');
+  gr.addColorStop(.8,'#7a4520'); gr.addColorStop(1,'#d97b2a');
+  g.fillStyle=gr; g.fillRect(0,0,2,512);
+  const tx=new THREE.CanvasTexture(c); tx.colorSpace=THREE.SRGBColorSpace;
+  scene.background=tx;
+}
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 400);
+
+// simple generated environment so metals have something to reflect
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(60,16,12),
+    new THREE.MeshBasicMaterial({color:0x3a5878, side:THREE.BackSide})));
+  const blk=(c,s,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),
+    new THREE.MeshBasicMaterial({color:c})); m.position.set(x,y,z); env.add(m);};
+  blk(0xfff0d0,18,28,32,16);   // sun
+  blk(0xff9a3d,12,-30,8,22);   // warm rig lights
+  blk(0xbcd2ec,14,0,-40,0);    // ground bounce
+  scene.environment = pmrem.fromScene(env, 0.06).texture;
+  pmrem.dispose();
+}
+
+// lights
+scene.add(new THREE.HemisphereLight(0xaec6e4, 0x57452e, 1.25));
+const sun = new THREE.DirectionalLight(0xffd9a8, 2.1);
+sun.position.set(22, 30, 16); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-25; sun.shadow.camera.right=25;
+sun.shadow.camera.top=30; sun.shadow.camera.bottom=-28;
+sun.shadow.camera.far=90;
+scene.add(sun);
+const fill = new THREE.PointLight(0xff9a3d, 45, 45); fill.position.set(-6,9,8); scene.add(fill);
+const cutLight = new THREE.PointLight(0xffe2b0, 60, 40); cutLight.position.set(0,-6,10); scene.add(cutLight);
+
+// materials
+const M = {
+  steel: new THREE.MeshStandardMaterial({color:0x7e8aa0, roughness:.45, metalness:.75}),
+  steelDk: new THREE.MeshStandardMaterial({color:0x49525f, roughness:.55, metalness:.7}),
+  chrome: new THREE.MeshStandardMaterial({color:0xd9e2ec, roughness:.12, metalness:.95}),
+  orange: new THREE.MeshStandardMaterial({color:0xe07818, roughness:.5, metalness:.4}),
+  red:   new THREE.MeshStandardMaterial({color:0xb4332a, roughness:.5, metalness:.5}),
+  pipe:  new THREE.MeshStandardMaterial({color:0x9aa6b4, roughness:.3, metalness:.85}),
+  collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
+  rail:  new THREE.MeshStandardMaterial({color:0xd8b53a, roughness:.6, metalness:.3}),
+};
+const box = (w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+const cyl = (rt,rb,h,m,seg=24)=>new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);
+function shadowed(o){ o.castShadow=true; o.receiveShadow=true; return o; }
+
+/* ground + cutaway */
+{
+  // ground exists only BEHIND the cut plane so the cutaway stays visible from the front
+  const ground = new THREE.Mesh(new THREE.BoxGeometry(180,0.2,90),
+    new THREE.MeshStandardMaterial({color:0x39402f, roughness:1}));
+  ground.position.set(0,-0.1,1.2-45); ground.receiveShadow=true; scene.add(ground);
+  const pad = shadowed(box(11,0.25,6, new THREE.MeshStandardMaterial({color:0x646b73, roughness:.9})));
+  pad.position.set(0,0.12,1.2-3); scene.add(pad);
+
+  const strata = [
+    {h:2.0, c:0x8a7355},{h:3.0, c:0x76624b},{h:3.0, c:0x665646},
+    {h:3.5, c:0x595142},{h:3.5, c:0x4c483d},
+  ];
+  let y=0;
+  for(const s of strata){
+    const m=new THREE.MeshStandardMaterial({color:s.c, roughness:1,
+      emissive:s.c, emissiveIntensity:0.22});
+    for(const side of [-1,1]){
+      const w = 12.5-0.8;
+      const b = box(w, s.h, 6.4, m);
+      b.position.set(side*(0.8+w/2), y - s.h/2, -2.0);
+      b.receiveShadow=true; scene.add(b);
+    }
+    y -= s.h;
+  }
+  // wellbore glow inside slot
+  wellGlowMat = new THREE.MeshBasicMaterial({color:0x2f9fc4, transparent:true, opacity:.4});
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.55, EARTH_D), wellGlowMat);
+  glow.position.set(0,-EARTH_D/2,-1.2); scene.add(glow);
+  // casing walls
+  for(const side of [-1,1]){
+    const w = box(0.12, EARTH_D, 4.4, M.steelDk);
+    w.position.set(side*0.86, -EARTH_D/2, -2.0); scene.add(w);
+  }
+}
+
+/* pipe + collars + bit */
+const pipe = cyl(0.17,0.17,31,M.pipe); pipe.position.y=-0.5; pipe.castShadow=true; scene.add(pipe);
+const collars=[];
+for(let i=0;i<9;i++){
+  const c=shadowed(cyl(0.27,0.27,0.55,M.collar)); scene.add(c); collars.push(c);
+}
+const bit = new THREE.Mesh(new THREE.ConeGeometry(0.34,0.9,16),
+  new THREE.MeshStandardMaterial({color:0xc9a13a, emissive:0x9c7a20, emissiveIntensity:.6, roughness:.35, metalness:.8}));
+bit.rotation.x=Math.PI; bit.position.z=0.25; scene.add(bit);
+
+/* markers: neutral point ring + target ring + labels */
+function labelSprite(text, color){
+  const c=document.createElement('canvas'); c.width=256; c.height=64;
+  const g=c.getContext('2d');
+  g.font='bold 34px Consolas,monospace'; g.fillStyle=color;
+  g.shadowColor='#000'; g.shadowBlur=8;
+  g.textAlign='left'; g.textBaseline='middle'; g.fillText(text,8,32);
+  const tx=new THREE.CanvasTexture(c); tx.colorSpace=THREE.SRGBColorSpace;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true, depthTest:false}));
+  s.scale.set(4.4,1.1,1); return s;
+}
+// markers painted on the cutaway face, facing the camera
+const npRing = new THREE.Mesh(new THREE.TorusGeometry(1.35,0.1,10,40),
+  new THREE.MeshStandardMaterial({color:0xffb000, emissive:0xff9500, emissiveIntensity:1.6, roughness:.4}));
+npRing.position.z=1.28; scene.add(npRing);
+const npLbl = labelSprite('◀ NEUTRAL PT','#ffc14d'); scene.add(npLbl);
+const tgtRing = new THREE.Mesh(new THREE.TorusGeometry(1.35,0.08,10,40),
+  new THREE.MeshStandardMaterial({color:0x3ddc7a, emissive:0x21c45f, emissiveIntensity:1.2, roughness:.4}));
+tgtRing.position.z=1.28; scene.add(tgtRing);
+const tgtLbl = labelSprite('◀ TARGET','#5cf09a'); scene.add(tgtLbl);
+
+/* snubbing unit */
+const rig = new THREE.Group(); scene.add(rig);
+let travHead, rods=[], travWedges=[], statWedges=[], beaconMat, rodGlowMats=[];
+{
+  // wellhead / BOP stack
+  const stack=new THREE.Group(); rig.add(stack);
+  const add=(m,y)=>{m.position.y=y; shadowed(m); stack.add(m); return m;};
+  add(cyl(1.15,1.15,0.3,M.steelDk),0.18);
+  add(cyl(0.72,0.78,1.0,M.steel),0.85);
+  for(let i=0;i<2;i++){ // ram BOPs
+    const y=1.75+i*1.25;
+    add(box(2.3,1.05,1.5,M.steel),y);
+    for(const s of [-1,1]){
+      const bonnet=cyl(0.34,0.34,0.8,M.red); bonnet.rotation.z=Math.PI/2;
+      bonnet.position.set(s*1.5,y,0); shadowed(bonnet); stack.add(bonnet);
+    }
+  }
+  add(cyl(0.95,0.95,1.1,M.steel),4.3);              // annular body
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(0.95,24,12,0,Math.PI*2,0,Math.PI/2),M.steelDk);
+  add(dome,4.85);
+  add(cyl(1.25,1.25,0.22,M.steelDk),5.1);           // top flange
+
+  // jack base plate + stationary slips
+  const base=add(box(3.6,0.28,3.6,M.orange),5.4);
+  add(cyl(0.72,0.85,0.5,M.steelDk),5.75);
+  for(const s of [-1,1]){
+    const w=box(0.5,0.42,0.5,M.rail); w.position.set(s*0.32,5.95,0); shadowed(w);
+    stack.add(w); statWedges.push({m:w,side:s});
+  }
+  // hydraulic cylinders (barrels fixed, rods extend to traveling head)
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const barrel=cyl(0.24,0.24,2.9,M.steel); barrel.position.set(sx*1.25,5.5+1.45,sz*1.25);
+    shadowed(barrel); rig.add(barrel);
+    const rodMat=M.chrome.clone(); rodGlowMats.push(rodMat);
+    const rod=cyl(0.11,0.11,1,rodMat); rig.add(rod);
+    rods.push({rod,x:sx*1.25,z:sz*1.25,baseTop:5.5+2.9});
+  }
+  // traveling head + traveling slips
+  travHead=new THREE.Group(); rig.add(travHead);
+  const plate=shadowed(box(3.2,0.3,3.2,M.orange)); travHead.add(plate);
+  const bowl=shadowed(cyl(0.62,0.74,0.45,M.steelDk)); bowl.position.y=0.35; travHead.add(bowl);
+  for(const s of [-1,1]){
+    const w=box(0.46,0.4,0.46,M.rail); w.position.set(s*0.3,0.62,0); shadowed(w);
+    travHead.add(w); travWedges.push({m:w,side:s});
+  }
+  // work basket (fixed) + legs + gin pole
+  const bY=13.0;
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const leg=cyl(0.09,0.09,bY-5.55,M.steelDk); leg.position.set(sx*2.05,(bY+5.55)/2,sz*2.05);
+    rig.add(leg);
+  }
+  const floor=shadowed(box(4.8,0.18,4.8,M.steelDk)); floor.position.y=bY; rig.add(floor);
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const post=cyl(0.05,0.05,1.1,M.rail); post.position.set(sx*2.3,bY+0.62,sz*2.3); rig.add(post);
+  }
+  for(const s of [-1,1]){
+    const r1=box(4.7,0.07,0.07,M.rail); r1.position.set(0,bY+1.15,s*2.3); rig.add(r1);
+    const r2=box(0.07,0.07,4.7,M.rail); r2.position.set(s*2.3,bY+1.15,0); rig.add(r2);
+  }
+  const pole=cyl(0.07,0.07,4.2,M.steel); pole.position.set(1.4,bY+3.1,0); pole.rotation.z=-0.32; rig.add(pole);
+  const pole2=pole.clone(); pole2.position.x=-1.4; pole2.rotation.z=0.32; rig.add(pole2);
+  // beacon
+  beaconMat=new THREE.MeshStandardMaterial({color:0x551111, emissive:0xff2020, emissiveIntensity:0});
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.16,12,8),beaconMat);
+  beacon.position.set(2.3,bY+1.45,2.3); rig.add(beacon);
+}
+
+/* ============ 5. PARTICLES — gas, sparks, motion streaks ============ */
+const dotTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=64;
+  const g=c.getContext('2d'), r=g.createRadialGradient(32,32,0,32,32,32);
+  r.addColorStop(0,'rgba(255,255,255,1)'); r.addColorStop(.4,'rgba(255,255,255,.65)');
+  r.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=r; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c); })();
+function makeParticles(n, color, size){
+  const geo=new THREE.BufferGeometry();
+  const pos=new Float32Array(n*3);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat=new THREE.PointsMaterial({color, size, map:dotTex, transparent:true, opacity:.8, depthWrite:false});
+  const pts=new THREE.Points(geo,mat); pts.frustumCulled=false; scene.add(pts);
+  const P=[];
+  for(let i=0;i<n;i++) P.push({x:0,y:-999,z:0,vx:0,vy:0,vz:0,life:0});
+  return {geo,pos,P,mat,
+    spawn(x,y,z,vx,vy,vz,life){
+      const p=this.P.find(q=>q.life<=0); if(!p) return;
+      p.x=x;p.y=y;p.z=z;p.vx=vx;p.vy=vy;p.vz=vz;p.life=life;
+    },
+    update(dt){
+      for(let i=0;i<this.P.length;i++){
+        const p=this.P[i];
+        if(p.life>0){ p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt; p.vy+=this.grav*dt; }
+        this.pos[i*3]=p.x; this.pos[i*3+1]=p.life>0?p.y:-999; this.pos[i*3+2]=p.z;
+      }
+      this.geo.attributes.position.needsUpdate=true;
+    }, grav:0};
+}
+const gasFx = makeParticles(220, 0xcfd8df, 0.34); gasFx.grav=1.2;
+const sparkFx = makeParticles(160, 0xffa030, 0.22); sparkFx.grav=-9;
+const streakFx = makeParticles(120, 0x9fd8ff, 0.16); streakFx.grav=0;
+
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+/* camera orbit */
+const cam={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6};
+{
+  let drag=false, px=0, py=0;
+  const el=renderer.domElement;
+  el.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;});
+  addEventListener('pointermove',e=>{ if(!drag)return;
+    cam.yaw -= (e.clientX-px)*0.005; cam.pitch += (e.clientY-py)*0.004;
+    cam.pitch=Math.max(-0.15,Math.min(1.1,cam.pitch)); px=e.clientX; py=e.clientY; });
+  addEventListener('pointerup',()=>drag=false);
+  el.addEventListener('wheel',e=>{ cam.dist=Math.max(11,Math.min(48,cam.dist+e.deltaY*0.02)); },{passive:true});
+}
+
+/* ============ 6. HUD — 2D canvases & readouts ============ */
+const $=id=>document.getElementById(id);
+const ui={lvl:$('hudLvl'),score:$('hudScore'),depth:$('hudDepth'),joints:$('hudJoints'),
+  toast:$('toast'),seal:$('sealFill'),fUp:$('fUp'),fDn:$('fDn'),badge:$('lhBadge'),
+  run:$('btnRun'),stat:$('btnStat'),trav:$('btnTrav'),up:$('btnJackUp'),dn:$('btnJackDn'),
+  bleed:$('btnBleed'),pump:$('btnPump')};
+let toastT=0;
+function toast(msg, info=false){
+  ui.toast.textContent=msg; ui.toast.className='show'+(info?' info':''); toastT=2.2;
+}
+
+const diagCtx=$('diag').getContext('2d');
+function drawDiagram(){
+  const g=diagCtx, W=150, H=430;
+  g.clearRect(0,0,W,H);
+  const top=26, bot=H-14, span=bot-top;
+  const yOf=ft=>top+Math.min(1.08,ft/st.mapDepth)*span*0.92;
+  // sky + ground
+  g.fillStyle='#1a2a3d'; g.fillRect(0,0,W,top);
+  g.fillStyle='#3a3327'; g.fillRect(0,top,W,H-top);
+  // light/heavy zones
+  const npY=yOf(npDepth());
+  g.fillStyle='rgba(80,160,255,0.10)'; g.fillRect(0,top,W,Math.max(0,npY-top));
+  g.fillStyle='rgba(255,170,80,0.08)'; g.fillRect(0,npY,W,bot-npY);
+  // wellbore
+  const cx=W/2, wb=14;
+  g.fillStyle='#14181e'; g.fillRect(cx-wb/2,top,wb,bot-top);
+  g.strokeStyle='#5a6878'; g.lineWidth=2;
+  g.strokeRect(cx-wb/2,top,wb,bot-top);
+  // BOP icon at surface
+  g.fillStyle='#88735a'; g.fillRect(cx-13,top-12,26,12);
+  g.fillStyle='#e07818'; g.fillRect(cx-13,top-14,26,4);
+  // pressure tint inside bore
+  const pf=Math.min(1,st.P/(st.p0+600));
+  g.fillStyle=`rgba(60,${170-pf*90},${220-pf*120},${0.25+pf*0.3})`;
+  g.fillRect(cx-wb/2+2,top,wb-4,bot-top);
+  // pipe
+  const pipeBot=yOf(st.depth);
+  g.fillStyle='#b8c2cc'; g.fillRect(cx-3,top-16,6,Math.max(2,pipeBot-top+16));
+  g.fillStyle='#c9a13a'; g.beginPath();
+  g.moveTo(cx-5,pipeBot); g.lineTo(cx+5,pipeBot); g.lineTo(cx,pipeBot+7); g.fill();
+  // joint ticks on pipe
+  g.fillStyle='#c9a13a';
+  for(let j=JOINT;j<st.depth;j+=JOINT){ const y=yOf(j); g.fillRect(cx-4,y,8,2); }
+  // objective marker (stage-aware)
+  g.font='bold 10px Consolas';
+  if(st.stage==='in'){
+    const ty=yOf(st.target);
+    g.strokeStyle='#3ddc7a'; g.setLineDash([5,4]); g.lineWidth=2;
+    g.beginPath(); g.moveTo(8,ty); g.lineTo(W-8,ty); g.stroke();
+    g.setLineDash([]); g.fillStyle='#3ddc7a';
+    g.fillText('TARGET '+st.target+'ft', 8, ty-4);
+  }else{
+    g.fillStyle='#3ddc7a';
+    g.fillText('▲ PULL TO SURFACE', 8, top-3);
+  }
+  // neutral point marker
+  g.strokeStyle='#ffb000'; g.setLineDash([3,3]); g.lineWidth=2;
+  g.beginPath(); g.moveTo(8,npY); g.lineTo(W-8,npY); g.stroke(); g.setLineDash([]);
+  g.fillStyle='#ffb000';
+  g.beginPath(); g.moveTo(W-8,npY); g.lineTo(W-16,npY-5); g.lineTo(W-16,npY+5); g.fill();
+  g.font='bold 10px Consolas';
+  g.fillText('NP '+Math.round(npDepth())+'ft', 8, npY-4);
+  g.font='9px Consolas'; g.fillStyle='#7ec8ff'; g.fillText('PIPE LIGHT', 8, top+12);
+  g.fillStyle='#ffb45e'; g.fillText('PIPE HEAVY', 8, Math.min(bot-4,npY+14));
+  // depth bubble
+  g.fillStyle='#dfe8f2'; g.font='bold 11px Consolas';
+  g.fillText(Math.round(st.depth)+' ft', cx+12, Math.min(bot-4,Math.max(top+12,pipeBot+4)));
+}
+
+const gaugeCtx=$('gauge').getContext('2d');
+function drawGauge(){
+  const g=gaugeCtx, W=230, H=150, cx=W/2, cy=H-22, R=88;
+  g.clearRect(0,0,W,H);
+  const pMax=st.p0+800;
+  const a0=Math.PI*1.0, a1=Math.PI*2.0;       // half circle
+  const aOf=p=>a0+(Math.min(pMax,Math.max(0,p))/pMax)*(a1-a0);
+  const band=(p1,p2,col,w)=>{ g.beginPath(); g.strokeStyle=col; g.lineWidth=w;
+    g.arc(cx,cy,R,aOf(p1),aOf(p2)); g.stroke(); };
+  band(0,pMax,'#222b36',16);
+  band(st.p0-450,st.p0-250,'#caa53d',14);
+  band(st.p0-250,st.p0+250,'#2c9c55',14);
+  band(st.p0+250,st.p0+450,'#caa53d',14);
+  band(st.p0+450,pMax,'#c2403a',14);
+  band(0,st.p0-450,'#7a5560',14);
+  // ticks
+  g.fillStyle='#9fb0c0'; g.font='9px Consolas'; g.textAlign='center';
+  for(let p=0;p<=pMax;p+=500){
+    const a=aOf(p);
+    g.fillText(p, cx+Math.cos(a)*(R-22), cy+Math.sin(a)*(R-22)+3);
+  }
+  // needle
+  const a=aOf(st.P);
+  g.strokeStyle='#ff8c1a'; g.lineWidth=3; g.beginPath();
+  g.moveTo(cx,cy); g.lineTo(cx+Math.cos(a)*(R-6), cy+Math.sin(a)*(R-6)); g.stroke();
+  g.fillStyle='#ff8c1a'; g.beginPath(); g.arc(cx,cy,5,0,7); g.fill();
+  // digital
+  g.font='bold 20px Consolas'; g.textAlign='center';
+  const danger=st.P>st.p0+450||st.P<st.p0-350;
+  g.fillStyle=danger?'#ff4d4d':'#dfe8f2';
+  g.fillText(Math.round(st.P)+' psi', cx, cy-16);
+}
+
+/* ============ 7. INPUT — buttons, keyboard, mode/dir ============ */
+function holdBtn(el,key){
+  el.addEventListener('pointerdown',e=>{e.preventDefault(); AudioFX.init(); st.held[key]=true; el.classList.add('held');});
+  const off=()=>{st.held[key]=false; el.classList.remove('held');};
+  el.addEventListener('pointerup',off); el.addEventListener('pointerleave',off);
+}
+holdBtn(ui.up,'up'); holdBtn(ui.dn,'dn'); holdBtn(ui.bleed,'bleed'); holdBtn(ui.pump,'pump');
+
+function setSlip(which,val){
+  if(st.mode==='auto' && st.autoRun) return;
+  if(which==='trav'){ if(st.trav!==val){st.trav=val; AudioFX.clack();} }
+  else { if(st.stat!==val){st.stat=val; AudioFX.clack();} }
+  refreshSlipBtns();
+}
+ui.trav.onclick=()=>{AudioFX.init(); setSlip('trav',!st.trav);};
+ui.stat.onclick=()=>{AudioFX.init(); setSlip('stat',!st.stat);};
+function refreshSlipBtns(){
+  ui.trav.classList.toggle('engaged',st.trav);
+  ui.stat.classList.toggle('engaged',st.stat);
+  ui.trav.innerHTML=(st.trav?'TRAVELING SLIPS ✔ SET':'TRAVELING SLIPS — OPEN')+' <span class="kbd">[E]</span>';
+  ui.stat.innerHTML=(st.stat?'STATIONARY SLIPS ✔ SET':'STATIONARY SLIPS — OPEN')+' <span class="kbd">[Q]</span>';
+}
+
+function setMode(m){
+  st.mode=m; st.autoRun=false; st.phase='idle';
+  $('modeMan').classList.toggle('on',m==='manual');
+  $('modeAuto').classList.toggle('on',m==='auto');
+  ui.run.disabled = m!=='auto';
+  ui.run.textContent='▶ RUN AUTO CYCLE'; ui.run.classList.remove('run-on');
+  const man=m==='manual';
+  [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=!man);
+  toast(m==='auto'?'AUTO: rig runs slips & jack — you manage pressure':'MANUAL: you run everything',true);
+}
+$('modeMan').onclick=()=>{AudioFX.init(); setMode('manual');};
+$('modeAuto').onclick=()=>{AudioFX.init(); setMode('auto');};
+function setDir(d){
+  st.dir=d; st.phase='idle';
+  $('dirIn').classList.toggle('on',d===1);
+  $('dirOut').classList.toggle('on',d===-1);
+}
+$('dirIn').onclick=()=>setDir(1);
+$('dirOut').onclick=()=>setDir(-1);
+ui.run.onclick=()=>{ AudioFX.init(); st.autoRun=!st.autoRun; st.phase='idle';
+  ui.run.textContent=st.autoRun?'⏸ PAUSE CYCLE':'▶ RUN AUTO CYCLE';
+  ui.run.classList.toggle('run-on',st.autoRun);
+  if(st.autoRun){ [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=true); }
+  else if(st.mode==='manual'){ [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=false); }
+};
+
+$('sndBtn').onclick=()=>{ AudioFX.init(); $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; };
+$('sndBtn').textContent = AudioFX.enabled ? '🔊' : '🔇';
+
+addEventListener('keydown',e=>{
+  if(e.repeat) return; AudioFX.init();
+  switch(e.key.toLowerCase()){
+    case 'w': case 'arrowup': st.held.up=true; ui.up.classList.add('held'); break;
+    case 's': case 'arrowdown': st.held.dn=true; ui.dn.classList.add('held'); break;
+    case 'b': st.held.bleed=true; ui.bleed.classList.add('held'); break;
+    case 'p': st.held.pump=true; ui.pump.classList.add('held'); break;
+    case 'q': if(st.mode==='manual') setSlip('stat',!st.stat); break;
+    case 'e': if(st.mode==='manual') setSlip('trav',!st.trav); break;
+    case 'm': $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; break;
+    case 'escape': setPaused(!st.paused); break;
+  }
+});
+addEventListener('keyup',e=>{
+  switch(e.key.toLowerCase()){
+    case 'w': case 'arrowup': st.held.up=false; ui.up.classList.remove('held'); break;
+    case 's': case 'arrowdown': st.held.dn=false; ui.dn.classList.remove('held'); break;
+    case 'b': st.held.bleed=false; ui.bleed.classList.remove('held'); break;
+    case 'p': st.held.pump=false; ui.pump.classList.remove('held'); break;
+  }
+});
+
+/* ============ 8. GAME FLOW — levels, stages, pause, tutorial ============ */
+function startLevel(lvl){
+  const cfg=getLevel(lvl), pipe=PIPES[cfg.pipe];
+  Object.assign(st,{
+    playing:true, paused:false, level:lvl,
+    p0:cfg.p0, target:cfg.target, startDepth:cfg.startDepth,
+    objective:cfg.objective, pipe,
+    drift:cfg.drift, surge:SURGE_K*pipe.area,
+    scoring:Object.assign({},SCORE_DEF,cfg.scoring),
+    events:cfg.events.map(e=>Object.assign({fired:false,warned:false},e)),
+    ramps:[],
+    stage: cfg.objective==='trip-out' ? 'out' : 'in',
+    stageStartDepth:cfg.startDepth,
+    mapDepth:Math.max(cfg.target,cfg.startDepth),
+    depth:cfg.startDepth, jack:0, trav:false, stat:true, travAnim:0, statAnim:1,
+    autoRun:false, phase:'idle',
+    P:cfg.p0, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
+    jointsDone:0, lastJoints:0, levelT:0, pipeV:0,
+    failing:false, failAnimT:0, shake:0,
+  });
+  setDir(st.stage==='out' ? -1 : 1); setMode(st.mode); refreshSlipBtns();
+  $('ovlPause').classList.add('hidden'); $('pauseBtn').textContent='⏸';
+  ui.lvl.textContent=lvl;
+  const objTxt = cfg.objective==='snub-in' ? 'snub to '+cfg.target+' ft'
+    : cfg.objective==='trip-out' ? 'pull '+cfg.startDepth+' ft of pipe to surface'
+    : 'snub to '+cfg.target+' ft, then trip back out';
+  toast('LEVEL '+lvl+' · '+cfg.name.toUpperCase()+' — '+objTxt+' ('+cfg.p0+' psi · '+pipe.label+')',true);
+}
+
+// mixed objective: target depth reached, flip to pulling out
+function beginOutStage(){
+  st.stage='out'; st.stageStartDepth=st.depth; st.lastJoints=0; st.jointsDone=0;
+  setDir(-1); st.phase='idle';
+  AudioFX.chime(); st.score+=250;
+  toast('TARGET DEPTH REACHED +250 — NOW TRIP OUT TO SURFACE',true);
+}
+function fail(reason){
+  if(st.failing) return;
+  st.failing=true; st.failAnimT=0; st.failReason=reason; st.autoRun=false;
+  AudioFX.boom(); AudioFX.setRumble(1); st.shake=1.2;
+  for(let i=0;i<140;i++)
+    gasFx.spawn(rnd(-0.4,0.4),5.4,rnd(-0.4,0.4),rnd(-2.5,2.5),rnd(6,16),rnd(-2.5,2.5),rnd(0.8,2.4));
+  for(let i=0;i<80;i++)
+    sparkFx.spawn(rnd(-0.3,0.3),5.6,rnd(-0.3,0.3),rnd(-4,4),rnd(5,14),rnd(-4,4),rnd(0.4,1.2));
+}
+function showFail(){
+  st.playing=false;
+  $('failReason').textContent=st.failReason;
+  $('failScore').textContent=st.score;
+  $('ovlFail').classList.remove('hidden');
+  AudioFX.setRumble(0); AudioFX.setAlarm(0); AudioFX.setHyd(0); AudioFX.setHiss(0);
+}
+function win(){
+  st.playing=false; st.autoRun=false;
+  const sc=st.scoring;
+  const sealBonus=Math.round(st.seal)*sc.sealMult;
+  const timeBonus=Math.max(0,Math.round(sc.parTime-st.levelT)*2);
+  st.score+=sc.level+sealBonus+timeBonus;
+  if(st.score>st.best){st.best=st.score; localStorage.setItem('sf_best',st.best);}
+  const unlocked=Math.max(+(localStorage.getItem('sf_maxlvl')||1), st.level+1);
+  localStorage.setItem('sf_maxlvl',unlocked); updateContinueBtn();
+  $('winTitle').textContent =
+    st.objective==='mixed'    ? 'ROUND TRIP COMPLETE ✔' :
+    st.objective==='trip-out' ? 'STRING RECOVERED ✔'    : 'PIPE ON BOTTOM ✔';
+  $('winStats').innerHTML=
+    'Level bonus +'+sc.level+' · Seal bonus +'+sealBonus+' · Time bonus +'+timeBonus+
+    '<br>Score: <b class="mono">'+st.score+'</b> &nbsp; Best: <b class="mono">'+st.best+'</b>';
+  $('ovlWin').classList.remove('hidden');
+  AudioFX.fanfare();
+  AudioFX.setAlarm(0); AudioFX.setHyd(0); AudioFX.setHiss(0); AudioFX.setRumble(0);
+}
+
+/* ---- pause / resume ---- */
+function setPaused(p){
+  if(!st.playing || st.failing) return;
+  if(st.paused===p) return;
+  st.paused=p;
+  $('ovlPause').classList.toggle('hidden',!p);
+  $('pauseBtn').textContent=p?'▶':'⏸';
+  if(p){
+    const cfg=getLevel(st.level);
+    $('pauseInfo').textContent='Level '+st.level+' — '+cfg.name+' · '+
+      (st.stage==='in'?'snubbing to '+st.target+' ft':'tripping out to surface');
+    AudioFX.setHyd(0); AudioFX.setHiss(0); AudioFX.setAlarm(0); AudioFX.setRumble(0);
+  }
+}
+$('pauseBtn').onclick=()=>setPaused(!st.paused);
+$('btnResume').onclick=()=>setPaused(false);
+$('btnRestartLvl').onclick=()=>{ st.paused=false; startLevel(st.level); };
+$('btnQuit').onclick=()=>{ st.paused=false; st.playing=false;
+  $('ovlPause').classList.add('hidden'); $('ovlTitle').classList.remove('hidden'); };
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) setPaused(true); });
+
+/* ---- tutorial ---- */
+const TUT_STEPS=[
+ {title:'THE SNUBBING UNIT', body:
+  'A snubbing unit forces pipe into — or pulls it out of — a <b>live well</b> that is still under pressure.'+
+  '<br><br>The machine is simple: a <b>hydraulic jack</b> that strokes up and down, and <b>two sets of slips</b> '+
+  '(pipe grippers). At least one set must be gripping the pipe at all times. The whole game is sequencing them correctly '+
+  'while keeping the well pressure under control.'},
+ {title:'TRAVELING SLIPS [E]', body:
+  'The <b>traveling slips</b> ride on the jack\'s moving head.'+
+  '<br><br>When they are <b>SET</b> (gripping), the pipe moves with the jack — stroke down to push pipe in, '+
+  'stroke up to pull it out. They are how the pipe actually travels.'},
+ {title:'STATIONARY SLIPS [Q]', body:
+  'The <b>stationary slips</b> are fixed to the top of the BOP stack. They hold the pipe still while the jack '+
+  'repositions for the next stroke.'+
+  '<br><br>Rule of thumb: <b>swap grips one at a time</b>. Set the new slips, confirm they\'ve closed, then release the old ones. '+
+  'If both are open, nothing holds the pipe. If both are set, the jack locks.'},
+ {title:'THE JACK STROKE [W/S]', body:
+  'The jack has a <b>10 ft stroke</b>. One full snub-in cycle:'+
+  '<br><br>1. Jack <b>up</b> empty (stationary holding)<br>2. Set <b>traveling</b>, release <b>stationary</b>'+
+  '<br>3. Jack <b>down</b> — pipe goes in 10 ft<br>4. Set <b>stationary</b>, release <b>traveling</b><br>5. Repeat'+
+  '<br><br>In <b>AUTO</b> mode the rig runs this sequence for you, and you focus on pressure.'},
+ {title:'THE NEUTRAL POINT', body:
+  'Well pressure pushes <b>up</b> on the pipe\'s cross-section. Pipe weight pulls <b>down</b>. '+
+  'The depth where they balance is the <b>neutral point</b> — the pulsing <b>golden ring</b> on the well diagram and cutaway.'+
+  '<br><br>It moves with pressure: bleed off and it rises, pump up and it sinks.'},
+ {title:'PIPE LIGHT vs PIPE HEAVY', body:
+  'Less pipe in the hole than the neutral point → <b>PIPE LIGHT</b>: the well wins, and ungripped pipe '+
+  '<b>launches out of the hole</b>.'+
+  '<br><br>More pipe than the neutral point → <b>PIPE HEAVY</b>: gravity wins, and ungripped pipe <b>drops down the well</b>.'+
+  '<br><br>Either way: never leave both slips open. The badge under the gauge always shows your current state.'},
+ {title:'PRESSURE CONTROL [B/P]', body:
+  'Keep the gauge needle in the <b>green band</b>.'+
+  '<br><br>Pushing pipe <b>in</b> displaces fluid and <b>surges pressure up</b> → <b>BLEED [B]</b> it off.'+
+  '<br>Pulling pipe <b>out</b> swabs pressure <b>down</b> → <b>PUMP [P]</b> it back up.'+
+  '<br><br>Too high: the seals wear and the BOP lets go. Too low: the well <b>kicks</b> gas at you. '+
+  'Bigger pipe surges harder — watch out on big-bore wells.'},
+];
+let tutIdx=0, tutThen=null;
+function showTutorial(then){ tutIdx=0; tutThen=then||null; renderTut();
+  $('ovlTut').classList.remove('hidden'); }
+function renderTut(){
+  const s=TUT_STEPS[tutIdx];
+  $('tutTitle').textContent=s.title; $('tutBody').innerHTML=s.body;
+  $('tutDots').innerHTML=TUT_STEPS.map((_,i)=>'<span'+(i===tutIdx?' class="on"':'')+'>●</span>').join('');
+  $('tutBack').disabled = tutIdx===0;
+  $('tutNext').textContent = tutIdx===TUT_STEPS.length-1 ? (tutThen?'START ▶':'DONE ✔') : 'NEXT ▶';
+}
+$('tutBack').onclick=()=>{ if(tutIdx>0){tutIdx--; renderTut();} };
+$('tutNext').onclick=()=>{
+  if(tutIdx<TUT_STEPS.length-1){ tutIdx++; renderTut(); return; }
+  localStorage.setItem('sf_tut','1');
+  $('ovlTut').classList.add('hidden');
+  if(tutThen){ const f=tutThen; tutThen=null; f(); }
+};
+
+/* ---- title / retry / next wiring ---- */
+function beginGame(lvl){
+  $('ovlTitle').classList.add('hidden'); st.score=0; startLevel(lvl);
+}
+function updateContinueBtn(){
+  const m=+(localStorage.getItem('sf_maxlvl')||1);
+  $('btnContinue').classList.toggle('hidden',m<=1);
+  $('btnContinue').textContent='CONTINUE — LEVEL '+m;
+}
+updateContinueBtn();
+$('btnStart').onclick=()=>{ AudioFX.init();
+  if(!localStorage.getItem('sf_tut')) showTutorial(()=>beginGame(1));
+  else beginGame(1); };
+$('btnTut').onclick=()=>{ AudioFX.init(); showTutorial(null); };
+$('btnContinue').onclick=()=>{ AudioFX.init(); beginGame(+(localStorage.getItem('sf_maxlvl')||1)); };
+$('btnRetry').onclick=()=>{AudioFX.init(); $('ovlFail').classList.add('hidden'); startLevel(st.level);};
+$('btnNext').onclick=()=>{AudioFX.init(); $('ovlWin').classList.add('hidden'); startLevel(st.level+1);};
+
+/* ============ 9. AUTO SEQUENCER — slip/jack state machine ============ */
+function autoStep(dt){
+  if(!st.autoRun){ return 0; }
+  const inDir = st.dir===1;
+  // jack target positions: gripped stroke moves head DOWN for snub-in
+  const strokeEnd = inDir ? 0 : STROKE;     // gripped travel destination
+  const returnEnd = inDir ? STROKE : 0;     // empty travel destination
+  let jv=0;
+  switch(st.phase){
+    case 'idle':
+      st.phase = Math.abs(st.jack-returnEnd)<0.05 ? 'grip' : 'prep';
+      if(!st.stat){ st.stat=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.trav){ st.trav=false; AudioFX.clack(); refreshSlipBtns(); }
+      break;
+    case 'prep': // run jack empty to return end (stationary holds pipe)
+      if(statGrip() && st.travAnim<0.05){
+        jv = Math.sign(returnEnd-st.jack)*JACK_SPD_AUTO;
+        if(Math.abs(returnEnd-st.jack)<0.08){ jv=0; st.phase='grip'; }
+      }
+      break;
+    case 'grip':
+      if(!st.trav){ st.trav=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.travAnim>0.97) st.phase='unset';
+      break;
+    case 'unset':
+      if(st.stat){ st.stat=false; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.statAnim<0.03) st.phase='stroke';
+      break;
+    case 'stroke': // gripped travel — pipe moves
+      jv = Math.sign(strokeEnd-st.jack)*JACK_SPD_AUTO;
+      if(Math.abs(strokeEnd-st.jack)<0.08){ jv=0; st.phase='set'; }
+      break;
+    case 'set':
+      if(!st.stat){ st.stat=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.statAnim>0.97) st.phase='ungrip';
+      break;
+    case 'ungrip':
+      if(st.trav){ st.trav=false; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.travAnim<0.03) st.phase='prep';
+      break;
+  }
+  return jv;
+}
+
+/* ============ 10. SIMULATION UPDATE ============ */
+function update(dt){
+  if(st.paused) return;
+  // slip animation
+  st.travAnim += ((st.trav?1:0)-st.travAnim) * Math.min(1, dt/SLIP_TIME*1.6);
+  st.statAnim += ((st.stat?1:0)-st.statAnim) * Math.min(1, dt/SLIP_TIME*1.6);
+  st.travAnim = st.trav ? Math.min(1,st.travAnim+dt/SLIP_TIME*0.4) : Math.max(0,st.travAnim-dt/SLIP_TIME*0.4);
+  st.statAnim = st.stat ? Math.min(1,st.statAnim+dt/SLIP_TIME*0.4) : Math.max(0,st.statAnim-dt/SLIP_TIME*0.4);
+
+  if(!st.playing) { AudioFX.setHyd(0); AudioFX.setHiss(0); return; }
+
+  if(st.failing){
+    st.failAnimT+=dt;
+    st.depth=Math.max(0, st.depth - (pipeLight()?160:(-160))*dt);  // pipe flies / drops
+    AudioFX.setRumble(Math.max(0,1-st.failAnimT*0.5));
+    if(st.failAnimT>1.6) showFail();
+    return;
+  }
+
+  st.levelT+=dt;
+
+  // scheduled well events (3 s advance warning, then effect)
+  for(const e of st.events){
+    if(!e.warned && st.levelT>=e.t-3){ e.warned=true; toast('⚠ '+e.warn); AudioFX.beep(330,0.25,0.3); }
+    if(!e.fired && st.levelT>=e.t){
+      e.fired=true;
+      if(e.type==='sandSlug'){ st.seal=Math.max(1,st.seal-e.seal); st.shake=0.6;
+        AudioFX.boom(); toast('SAND SLUG — SEAL −'+e.seal+'%'); }
+      else st.ramps.push({rate:e.dP/e.dur, left:e.dur});   // gasPocket / pressureDrop
+    }
+  }
+  if(st.ramps.length){
+    for(const r of st.ramps){ const step=Math.min(dt,r.left); st.P+=r.rate*step; r.left-=step; }
+    st.ramps=st.ramps.filter(r=>r.left>0);
+  }
+
+  // jack velocity request
+  let jv=0;
+  if(st.mode==='manual' || !st.autoRun){
+    if(st.held.up) jv+=JACK_SPD_MAN;
+    if(st.held.dn) jv-=JACK_SPD_MAN;
+  }
+  if(st.mode==='auto') jv += autoStep(dt);
+
+  // constraints
+  const tg=travGrip(), sg=statGrip();
+  if(tg && sg && jv!==0){
+    jv=0; st.lockWarnT+=dt;
+    if(st.lockWarnT>0.4){ toast('BOTH SLIPS SET — JACK LOCKED'); st.lockWarnT=0; AudioFX.beep(220,0.1,0.2); }
+  } else st.lockWarnT=0;
+
+  const j0=st.jack;
+  st.jack=Math.max(0,Math.min(STROKE,st.jack+jv*dt));
+  let dj=st.jack-j0;
+  let dDepth=0;
+  if(tg && !sg && dj!==0){
+    dDepth = -dj;                        // head down (jack-) pushes pipe in (+depth)
+    const nd=Math.max(0,st.depth+dDepth);
+    dDepth=nd-st.depth; st.depth=nd;
+  }
+  st.pipeV = dDepth/Math.max(dt,1e-4);
+  AudioFX.setHyd(Math.min(1,Math.abs(jv)/JACK_SPD_MAN));
+
+  // runaway check — nothing holding the pipe
+  if(!tg && !sg && st.travAnim<0.85 && st.statAnim<0.85){
+    st.runawayT+=dt;
+    if(st.runawayT>0.25 && st.runawayT<0.9){
+      toast(pipeLight()?'⚠ NOTHING HOLDING PIPE — IT WILL LAUNCH!':'⚠ NOTHING HOLDING PIPE — STRING WILL DROP!');
+      AudioFX.setAlarm(Math.sin(performance.now()/60)>0?1:0);
+    }
+    if(st.runawayT>0.9){
+      fail(pipeLight()?'Pipe launched out of the hole — nothing was gripping it while pipe-light.'
+                      :'String dropped down the well — nothing was gripping it while pipe-heavy.');
+      return;
+    }
+  } else st.runawayT=0;
+
+  // pressure dynamics
+  st.P += st.drift*dt;                    // gas migration (per level)
+  st.P += st.surge*dDepth;                // surge/swab scales with pipe displacement
+  if(st.held.bleed){ st.P=Math.max(0,st.P-BLEED_RATE*dt); }
+  if(st.held.pump){ st.P+=PUMP_RATE*dt; }
+  AudioFX.setHiss(st.held.bleed?1:0);
+  if(st.kicking){
+    st.P+=140*dt;
+    AudioFX.setRumble(0.5);
+    if(st.P>st.p0){ st.kicking=false; AudioFX.setRumble(0); toast('KICK CIRCULATED OUT',true); }
+  }
+
+  // seal wear
+  const moving=Math.abs(st.pipeV)>0.2;
+  if(moving && st.P>st.p0+250) st.seal-=5*dt;
+  if(st.P>st.p0+450) st.seal-=9*dt;
+  if(st.seal<=0){ fail('Annular seal destroyed — stripped pipe too hard against high pressure.'); return; }
+
+  // overpressure / blowout
+  if(st.P>st.p0+600){
+    st.blowT+=dt; st.shake=Math.min(0.5,st.shake+dt);
+    if(st.blowT>2.0){ fail('BOP overpressured — wellhead let go. Bleed off earlier!'); return; }
+  } else st.blowT=Math.max(0,st.blowT-dt*2);
+
+  // swab / kick
+  if(st.P<st.p0-350 && !st.kicking){
+    st.kickT+=dt;
+    if(st.kickT>0.3 && st.kickT<2.4) toast('⚠ PRESSURE TOO LOW — SWAB KICK RISK');
+    if(st.kickT>2.4){ st.kicking=true; st.kickT=0; st.score=Math.max(0,st.score-150);
+      toast('💥 GAS KICK! PRESSURE RISING'); AudioFX.boom(); st.shake=0.8; }
+  } else st.kickT=0;
+
+  // alarm state
+  const danger=st.P>st.p0+450||st.P<st.p0-350||st.kicking;
+  AudioFX.setAlarm(danger ? (Math.sin(performance.now()/130)>0?1:0) : 0);
+  beaconMat.emissiveIntensity = danger ? (Math.sin(performance.now()/130)>0?2.5:0.2) : 0;
+
+  // joints / score / stage / win
+  const si=stageInfo();
+  if(si.joints>st.lastJoints){
+    const pts=st.scoring.joint*(si.joints-st.lastJoints);
+    st.score+=pts; AudioFX.chime();
+    toast(st.stage==='in' ? 'JOINT '+si.joints+' IN THE HOLE  +'+pts
+                          : 'JOINT '+si.joints+' RACKED BACK  +'+pts, true);
+  }
+  st.lastJoints=si.joints; st.jointsDone=si.joints;
+  if(st.stage==='in' && st.depth>=st.target){
+    if(st.objective==='mixed'){ beginOutStage(); }
+    else { win(); return; }
+  } else if(st.stage==='out' && st.depth<=0.01){ win(); return; }
+
+  // ambient gas shimmer at high pressure
+  if(Math.random()<Math.min(0.5,(st.P-st.p0)/900+0.06))
+    gasFx.spawn(rnd(-0.5,0.5),5.3,rnd(-0.5,0.5),rnd(-0.2,0.2),rnd(0.8,2),rnd(-0.2,0.2),rnd(1,2.5));
+  // pipe-motion streaks
+  if(moving && Math.random()<0.8){
+    const dir=Math.sign(st.pipeV); // + = going in (down)
+    streakFx.spawn(rnd(-0.35,0.35),rnd(6,12),rnd(-0.35,0.35),0,-dir*rnd(4,9),0,0.4);
+    if(Math.random()<0.25) sparkFx.spawn(rnd(-0.25,0.25),6.05,rnd(-0.25,0.25),rnd(-1,1),rnd(0.5,2),rnd(-1,1),0.3);
+  }
+}
+
+/* ---- per-frame HUD refresh ---- */
+function refreshHUD(dt){
+  ui.score.textContent=st.score;
+  ui.depth.textContent=Math.round(st.depth);
+  const si=stageInfo();
+  ui.joints.textContent=si.joints+'/'+si.jointsTotal;
+  $('hudObj').textContent = st.stage==='in' ? 'SNUB IN → '+st.target+' ft' : 'TRIP OUT → SURFACE';
+  ui.seal.style.width=Math.max(0,st.seal)+'%';
+  ui.seal.style.background=st.seal>50?'linear-gradient(90deg,#3ddc7a,#9fe870)':
+    st.seal>25?'linear-gradient(90deg,#ffd23d,#ffb45e)':'linear-gradient(90deg,#ff4d4d,#ff8080)';
+  ui.fUp.textContent='↑ '+upForce().toFixed(1)+' klb well force';
+  ui.fDn.textContent='↓ '+stringWt().toFixed(1)+' klb string';
+  const light=pipeLight();
+  ui.badge.textContent=light?'▲ PIPE LIGHT — SNUBBING':'▼ PIPE HEAVY — CONVENTIONAL';
+  ui.badge.classList.toggle('heavy',!light);
+  if(toastT>0){ toastT-=dt; if(toastT<=0) ui.toast.className=''; }
+  drawDiagram(); drawGauge();
+}
+
+/* ============ 11. RENDER LOOP ============ */
+function depthToCutY(ft){
+  return CUT_TOP + Math.min(1.06, ft/st.mapDepth)*(CUT_BOT-CUT_TOP);
+}
+const clock=new THREE.Clock();
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,clock.getDelta());
+  update(dt);
+  refreshHUD(dt);
+
+  // traveling head + rods
+  const headY=8.75+st.jack*Y_SCALE;
+  travHead.position.y=headY;
+  for(const r of rods){
+    const len=Math.max(0.1,headY-0.15-r.baseTop+0.3);
+    r.rod.scale.y=len; r.rod.position.set(r.x,(r.baseTop-0.3+headY-0.15)/2,r.z);
+  }
+  const jacking=Math.abs(st.pipeV)>0.2||st.held.up||st.held.dn||(st.autoRun&&(st.phase==='stroke'||st.phase==='prep'));
+  for(const m of rodGlowMats){ m.emissive=new THREE.Color(0x66c2ff);
+    m.emissiveIntensity=jacking?0.5+0.3*Math.sin(performance.now()/90):0; }
+  // slips wedges slide
+  for(const w of travWedges) w.m.position.x=w.side*(0.62-0.32*st.travAnim);
+  for(const w of statWedges) w.m.position.x=w.side*(0.64-0.32*st.statAnim);
+
+  // collars travel with pipe (depth-based, schematic)
+  const travel=st.depth*Y_SCALE;
+  for(let i=0;i<collars.length;i++){
+    let y=(((i*3.5 - travel) % 31.5)+31.5)%31.5;   // 0..31.5
+    collars[i].position.y = 15 - y;
+    collars[i].visible = collars[i].position.y < 14.6;
+  }
+  // bit + markers in cutaway
+  bit.position.y=depthToCutY(st.depth)-0.4;
+  bit.visible = st.depth>1;
+  const npY=depthToCutY(Math.min(npDepth(), st.target*1.05));
+  npRing.position.y=npY; npLbl.position.set(4.2,npY,1.3);
+  const pulse=1.3+0.7*Math.sin(performance.now()/300);
+  npRing.material.emissiveIntensity=pulse;
+  const tY=depthToCutY(st.target);
+  const showTgt = st.stage==='in';
+  tgtRing.visible=showTgt; tgtLbl.visible=showTgt;
+  tgtRing.position.y=tY; tgtLbl.position.set(3.9,tY,1.3);
+
+  // wellbore pressure glow
+  wellGlowMat.opacity=0.18+Math.min(0.5,st.P/(st.p0+600)*0.45)+0.05*Math.sin(performance.now()/250);
+
+  // particles
+  gasFx.update(dt); sparkFx.update(dt); streakFx.update(dt);
+
+  // camera
+  st.shake=Math.max(0,st.shake-dt*1.2);
+  const sh=st.shake, t=performance.now();
+  const yaw=cam.yaw + (st.playing?0:t*0.00006);
+  camera.position.set(
+    cam.tx+Math.sin(yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5,
+    cam.ty+Math.sin(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5,
+    Math.cos(yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5);
+  camera.lookAt(cam.tx,cam.ty,0);
+
+  renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+setMode('manual'); refreshSlipBtns(); frame();
+</script>
+</body>
+</html>
