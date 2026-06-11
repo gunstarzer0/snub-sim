@@ -17,9 +17,13 @@ The well is under pressure and pushes up on the pipe's cross-sectional area. Pip
 | **PIPE LIGHT** | string weight < well force (above NP) | Ungripped pipe **launches out of the hole** |
 | **PIPE HEAVY** | string weight > well force (below NP) | Ungripped pipe **drops down the well** |
 
-At least one set of slips must grip the pipe at all times. The jack strokes 10 ft; you move pipe by cycling grips:
+There are **four slip sets** — heavy and snub (inverted) slips at both the traveling plate and the stationary basket. **Heavy slips only carry pipe-heavy string; snub slips only restrain pipe-light string** — the wrong type for the load simply won't hold. At least one station must effectively hold the pipe at all times, slips can never close on a tool joint, and joints are realistically ~10 m each with slight variation.
+
+The jack strokes 10 ft; you move pipe by cycling grips:
 
 **Snub-in cycle:** jack up empty → set traveling slips → release stationary slips → jack down (pipe goes in) → set stationary → release traveling → repeat.
+
+The **annular closing pressure** must track wellhead pressure: too low and gas leaks past the element (watch the puffs as tool joints pass through), too high and friction wears it out while stripping.
 
 Meanwhile, pipe movement displaces wellbore fluid: stripping **in** surges pressure up (bleed it off), pulling **out** swabs it down (pump it back up). Leave the green band too long and you wear out the annular seal, blow the BOP, or take a gas kick.
 
@@ -36,9 +40,10 @@ Levels also schedule **well events** (gas pockets, pressure drops, sand slugs) w
 | Input | Action |
 |---|---|
 | `W` / `S` (or ↑/↓) | Jack extend / retract |
-| `Q` | Stationary slips set/open |
-| `E` | Traveling slips set/open |
+| `Q` / `A` | Stationary heavy / snub slips |
+| `E` / `D` | Traveling heavy / snub slips |
 | `B` / `P` | Bleed / pump wellhead pressure |
+| `Z` / `X` | Annular closing pressure down / up (or slider) |
 | `Esc` | Pause |
 | `M` | Sound toggle |
 | Mouse drag / wheel | Orbit / zoom camera |

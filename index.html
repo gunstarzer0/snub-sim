@@ -52,6 +52,9 @@
   .btn.run-on{background:var(--bad);border-color:#ff8080;color:#fff;}
   .kbd{opacity:.55;font-size:10px;font-weight:400;}
   #forceRead{display:flex;justify-content:space-between;font-size:11px;margin-top:6px;}
+  .sliplbl{width:42px;display:flex;align-items:center;justify-content:center;font-size:9px;
+    font-weight:700;color:var(--acc2);letter-spacing:.5px;line-height:1.2;text-align:center;}
+  #annSlider{width:100%;accent-color:var(--acc);cursor:pointer;margin:2px 0;}
   #lhBadge{margin-top:6px;text-align:center;font-weight:800;font-size:12px;letter-spacing:1px;
     border-radius:6px;padding:4px;background:#173247;color:#7ec8ff;}
   #lhBadge.heavy{background:#3a2c14;color:#ffb45e;}
@@ -119,6 +122,9 @@
     </div>
     <h4 style="margin-top:10px;">ANNULAR SEAL</h4>
     <div id="sealBar"><div id="sealFill"></div></div>
+    <h4 style="margin-top:10px;">ANNULAR CLOSING PRESSURE <span class="kbd">[Z/X]</span></h4>
+    <input type="range" id="annSlider" min="0" max="100" value="60">
+    <div id="annInfo" class="mono" style="font-size:11px;text-align:center;">SET 60 · REQUIRED ~35</div>
     <div id="forceRead" class="mono">
       <span id="fUp" style="color:#7ec8ff;">↑ 0.0 klb</span>
       <span id="fDn" style="color:#ffb45e;">↓ 0.0 klb</span>
@@ -148,16 +154,20 @@
       <button class="btn" id="btnJackDn">JACK ▼ <span class="kbd">[S]</span></button>
     </div>
     <div class="row">
-      <button class="btn engaged" id="btnStat">STATIONARY SLIPS <span class="kbd">[Q]</span></button>
+      <span class="sliplbl">TRAV<br>SLIPS</span>
+      <button class="btn" id="btnTravH">HEAVY <span class="kbd">[E]</span></button>
+      <button class="btn" id="btnTravL">SNUB <span class="kbd">[D]</span></button>
     </div>
     <div class="row">
-      <button class="btn" id="btnTrav">TRAVELING SLIPS <span class="kbd">[E]</span></button>
+      <span class="sliplbl">STAT<br>SLIPS</span>
+      <button class="btn engaged" id="btnStatH">HEAVY <span class="kbd">[Q]</span></button>
+      <button class="btn engaged" id="btnStatL">SNUB <span class="kbd">[A]</span></button>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
-<div id="hintbar">Drag to orbit · Scroll to zoom · W/S jack · Q/E slips · B bleed · P pump · M sound</div>
+<div id="hintbar">Drag to orbit · Scroll zoom · W/S jack · Q/A stat slips · E/D trav slips · B/P pressure · Z/X annular · M sound</div>
 
 <div class="ovl" id="ovlTitle">
   <div class="card">
@@ -168,13 +178,15 @@
     pressure in the green band — bleed off surge as you strip in, but don't swab it down into a kick.</p>
     <div class="ctl">
       <span><b>W / S</b> — jack extend / retract</span>
-      <span><b>Q</b> — stationary slips</span>
-      <span><b>E</b> — traveling slips</span>
+      <span><b>Q / A</b> — stationary heavy / snub slips</span>
+      <span><b>E / D</b> — traveling heavy / snub slips</span>
       <span><b>B / P</b> — bleed / pump pressure</span>
+      <span><b>Z / X</b> — annular closing pressure</span>
       <span><b>AUTO mode</b> — rig sequences slips & jack for you; you manage pressure</span>
-      <span><b>Golden ring</b> — neutral point: above it the pipe is LIGHT (it ejects if nothing grips it!)</span>
+      <span><b>Golden ring</b> — neutral point: above it the pipe is LIGHT and only SNUB slips hold it</span>
+      <span><b>Slip types</b> — HEAVY slips carry heavy pipe; SNUB slips restrain light pipe</span>
     </div>
-    <p style="text-align:center;opacity:.7;">Manual cycle (snub in): jack up empty → grip TRAVELING → release STATIONARY → jack down → set STATIONARY → release TRAVELING → repeat.</p>
+    <p style="text-align:center;opacity:.7;">Manual cycle (snub in): jack up empty → grip TRAVELING → release STATIONARY → jack down → set STATIONARY → release TRAVELING → repeat. Match the slip type to the load — and never close slips on a tool joint.</p>
     <div class="btnrow">
       <button id="btnStart">START SHIFT</button>
       <button id="btnTut" class="ghost">📖 TUTORIAL</button>
@@ -243,7 +255,7 @@
 
 /* ============ 1. CONFIG & LEVELS ============ */
 const STROKE = 10;          // jack stroke, ft
-const JOINT  = 30;          // ft per joint
+const JOINT_AVG = 32.8;     // ft per joint (~10 m), actual joints vary slightly
 const JACK_SPD_MAN  = 8;    // ft/s
 const JACK_SPD_AUTO = 9;
 const SLIP_TIME = 0.35;     // s to set/pull slips
@@ -252,6 +264,18 @@ const BLEED_RATE = 230, PUMP_RATE = 170;
 const Y_SCALE = 0.3;        // world units per ft (surface equipment)
 const CUT_TOP = -1.0, CUT_BOT = -14.0;   // cutaway window (world y)
 const EARTH_D = 15;         // cutaway depth, world units
+
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+// each level gets its own tally of joints: ~10 m each with real-world variation
+function makeJointTable(maxFt){
+  const jointLens=[], jointCum=[]; let s=0;
+  while(s < maxFt + 200){
+    const L = JOINT_AVG + rnd(-1.8,1.8);   // 31–34.6 ft (≈9.5–10.5 m)
+    jointLens.push(L); s+=L; jointCum.push(s);
+  }
+  return {jointLens, jointCum};
+}
 
 // pipe presets: weight drives string weight, area drives both well
 // force and surge/swab magnitude (bigger pipe displaces more fluid)
@@ -308,6 +332,7 @@ function getLevel(n){
 /* ============ 2. AUDIO (all synthesized, no assets) ============ */
 const AudioFX = (() => {
   let ctx=null, master=null, hydGain=null, hissGain=null, rumbleGain=null, alarmGain=null, alarmOsc=null;
+  let noiseB=null;
   let enabled = localStorage.getItem('sf_snd') !== '0';
   function noiseBuf(c){
     const b=c.createBuffer(1,c.sampleRate*2,c.sampleRate), d=b.getChannelData(0);
@@ -318,7 +343,7 @@ const AudioFX = (() => {
     if(ctx) return;
     ctx = new (window.AudioContext||window.webkitAudioContext)();
     master = ctx.createGain(); master.gain.value = enabled?0.5:0; master.connect(ctx.destination);
-    const nb = noiseBuf(ctx);
+    const nb = noiseBuf(ctx); noiseB = nb;
     // hydraulic hum: looped noise -> bandpass
     const hSrc=ctx.createBufferSource(); hSrc.buffer=nb; hSrc.loop=true;
     const hF=ctx.createBiquadFilter(); hF.type='bandpass'; hF.frequency.value=190; hF.Q.value=2.5;
@@ -356,8 +381,13 @@ const AudioFX = (() => {
     const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(120,t);
     o.frequency.exponentialRampToValueAtTime(30,t+0.8);
     const g=ctx.createGain(); env(g,t,0.01,0.9,1.2); o.connect(g).connect(master); o.start(t); o.stop(t+1.4); }
+  function puff(vol=0.2){ if(!ctx||!noiseB)return; const t=ctx.currentTime;
+    const s=ctx.createBufferSource(); s.buffer=noiseB;
+    const f=ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=1500;
+    const g=ctx.createGain(); env(g,t,0.01,vol,0.22);
+    s.connect(f).connect(g).connect(master); s.start(t); s.stop(t+0.3); }
   return {
-    init, clack, beep, chime, fanfare, boom,
+    init, clack, beep, chime, fanfare, boom, puff,
     setHyd(v){ if(hydGain) hydGain.gain.value = v*0.35; },
     setHiss(v){ if(hissGain) hissGain.gain.value = v*0.25; },
     setRumble(v){ if(rumbleGain) rumbleGain.gain.value = v*0.6; },
@@ -378,32 +408,64 @@ const st = {
   scoring:SCORE_DEF, events:[], ramps:[],
   // objective stage: 'in' = running toward target, 'out' = pulling to surface
   stage:'in', stageStartDepth:0, mapDepth:240,
-  // pipe & rig
-  depth:0, jack:0, trav:false, stat:true, travAnim:0, statAnim:1,
+  // joint tally (regenerated per level)
+  jointLens:[], jointCum:[],
+  // pipe & rig — four slips: heavy holds pipe-heavy, snub holds pipe-light
+  depth:0, prevDepth:0, jack:0,
+  travH:false, travL:false, statH:true, statL:true,
+  travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
   mode:'manual', dir:1, autoRun:false, phase:'idle',
   // well
   P:700, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
+  annular:60, annReq:35, annWarnT:0, wasLight:true,
   // progress & fx
   jointsDone:0, lastJoints:0, levelT:0, pipeV:0, lockWarnT:0,
   failing:false, failAnimT:0, failReason:'', shake:0,
-  held:{up:false,dn:false,bleed:false,pump:false},
+  held:{up:false,dn:false,bleed:false,pump:false,annDn:false,annUp:false},
 };
+Object.assign(st, makeJointTable(300));
 
 const upForce  = () => st.P * st.pipe.area / 1000;             // klb
 const stringWt = () => st.depth * st.pipe.weight / 1000;       // klb
 const npDepth  = () => st.P * st.pipe.area / st.pipe.weight;   // ft — same crossing as the forces
 const pipeLight= () => stringWt() < upForce();
-const travGrip = () => st.trav && st.travAnim > 0.85;
-const statGrip = () => st.stat && st.statAnim > 0.85;
+
+// a station holds the pipe only if the slip type matching the load is set:
+// HEAVY slips carry pipe-heavy string, SNUB slips restrain pipe-light string
+function travHolds(){ const l=pipeLight();
+  return (st.travH && st.travHAnim>0.85 && !l) || (st.travL && st.travLAnim>0.85 && l); }
+function statHolds(){ const l=pipeLight();
+  return (st.statH && st.statHAnim>0.85 && !l) || (st.statL && st.statLAnim>0.85 && l); }
+const anySlipSet = () => st.travH||st.travL||st.statH||st.statL;
+
+// joint tally helpers — counts of full joints below a given footage
+function jointsFromFt(ft){ let n=0;
+  for(const c of st.jointCum){ if(c<=ft) n++; else break; } return n; }
+function jointsNeeded(ft){ let n=0;
+  for(const c of st.jointCum){ n++; if(c>=ft) break; } return n; }
+
+// world-space Y of tool-joint collars near the rig
+function collarYs(){
+  const ys=[];
+  for(const c of st.jointCum){
+    const y=(c-st.depth)*Y_SCALE;
+    if(y>-2 && y<16) ys.push(y);
+  }
+  return ys;
+}
+function collarAt(y){ return collarYs().some(cy=>Math.abs(cy-y)<0.5); }
+const statSlipY = () => 5.85;
+const travSlipY = () => 8.75 + st.jack*Y_SCALE + 0.62;
 
 // progress within the current objective stage
 function stageInfo(){
-  const to = st.stage==='in' ? st.target : 0;
-  const total = Math.abs(to - st.stageStartDepth);
-  const prog  = Math.min(total, Math.abs(st.depth - st.stageStartDepth));
-  return { prog, total,
-    joints: Math.floor(prog/JOINT),
-    jointsTotal: Math.max(1, Math.ceil(total/JOINT)) };
+  if(st.stage==='in'){
+    const j0=jointsFromFt(st.stageStartDepth);
+    return { joints: jointsFromFt(st.depth)-j0,
+             jointsTotal: Math.max(1, jointsNeeded(st.target)-j0) };
+  }
+  return { joints: jointsFromFt(st.stageStartDepth)-jointsFromFt(st.depth),
+           jointsTotal: Math.max(1, jointsFromFt(st.stageStartDepth)) };
 }
 
 /* ============ 4. 3D SCENE ============ */
@@ -467,6 +529,7 @@ const M = {
   pipe:  new THREE.MeshStandardMaterial({color:0x9aa6b4, roughness:.3, metalness:.85}),
   collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
   rail:  new THREE.MeshStandardMaterial({color:0xd8b53a, roughness:.6, metalness:.3}),
+  snub:  new THREE.MeshStandardMaterial({color:0x5fb4e8, roughness:.5, metalness:.4}),
 };
 const box = (w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
 const cyl = (rt,rb,h,m,seg=24)=>new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);
@@ -541,7 +604,8 @@ const tgtLbl = labelSprite('◀ TARGET','#5cf09a'); scene.add(tgtLbl);
 
 /* snubbing unit */
 const rig = new THREE.Group(); scene.add(rig);
-let travHead, rods=[], travWedges=[], statWedges=[], beaconMat, rodGlowMats=[];
+let travHead, rods=[], beaconMat, rodGlowMats=[];
+const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
 {
   // wellhead / BOP stack
   const stack=new THREE.Group(); rig.add(stack);
@@ -561,12 +625,14 @@ let travHead, rods=[], travWedges=[], statWedges=[], beaconMat, rodGlowMats=[];
   add(dome,4.85);
   add(cyl(1.25,1.25,0.22,M.steelDk),5.1);           // top flange
 
-  // jack base plate + stationary slips
+  // jack base plate + stationary slip station (heavy above, snub inverted below)
   const base=add(box(3.6,0.28,3.6,M.orange),5.4);
   add(cyl(0.72,0.85,0.5,M.steelDk),5.75);
   for(const s of [-1,1]){
-    const w=box(0.5,0.42,0.5,M.rail); w.position.set(s*0.32,5.95,0); shadowed(w);
-    stack.add(w); statWedges.push({m:w,side:s});
+    const wh=box(0.5,0.38,0.5,M.rail); wh.position.set(s*0.32,5.98,0); shadowed(wh);
+    stack.add(wh); statHW.push({m:wh,side:s});
+    const wl=box(0.46,0.34,0.46,M.snub); wl.position.set(s*0.32,5.6,0); shadowed(wl);
+    stack.add(wl); statLW.push({m:wl,side:s});
   }
   // hydraulic cylinders (barrels fixed, rods extend to traveling head)
   for(const sx of [-1,1]) for(const sz of [-1,1]){
@@ -576,13 +642,15 @@ let travHead, rods=[], travWedges=[], statWedges=[], beaconMat, rodGlowMats=[];
     const rod=cyl(0.11,0.11,1,rodMat); rig.add(rod);
     rods.push({rod,x:sx*1.25,z:sz*1.25,baseTop:5.5+2.9});
   }
-  // traveling head + traveling slips
+  // traveling head + traveling slip station (heavy above, snub inverted below)
   travHead=new THREE.Group(); rig.add(travHead);
   const plate=shadowed(box(3.2,0.3,3.2,M.orange)); travHead.add(plate);
   const bowl=shadowed(cyl(0.62,0.74,0.45,M.steelDk)); bowl.position.y=0.35; travHead.add(bowl);
   for(const s of [-1,1]){
-    const w=box(0.46,0.4,0.46,M.rail); w.position.set(s*0.3,0.62,0); shadowed(w);
-    travHead.add(w); travWedges.push({m:w,side:s});
+    const wh=box(0.46,0.36,0.46,M.rail); wh.position.set(s*0.3,0.66,0); shadowed(wh);
+    travHead.add(wh); travHW.push({m:wh,side:s});
+    const wl=box(0.42,0.32,0.42,M.snub); wl.position.set(s*0.3,0.18,0); shadowed(wl);
+    travHead.add(wl); travLW.push({m:wl,side:s});
   }
   // work basket (fixed) + legs + gin pole
   const bY=13.0;
@@ -639,8 +707,6 @@ const gasFx = makeParticles(220, 0xcfd8df, 0.34); gasFx.grav=1.2;
 const sparkFx = makeParticles(160, 0xffa030, 0.22); sparkFx.grav=-9;
 const streakFx = makeParticles(120, 0x9fd8ff, 0.16); streakFx.grav=0;
 
-const rnd=(a,b)=>a+Math.random()*(b-a);
-
 /* camera orbit */
 const cam={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6};
 {
@@ -658,8 +724,10 @@ const cam={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6};
 const $=id=>document.getElementById(id);
 const ui={lvl:$('hudLvl'),score:$('hudScore'),depth:$('hudDepth'),joints:$('hudJoints'),
   toast:$('toast'),seal:$('sealFill'),fUp:$('fUp'),fDn:$('fDn'),badge:$('lhBadge'),
-  run:$('btnRun'),stat:$('btnStat'),trav:$('btnTrav'),up:$('btnJackUp'),dn:$('btnJackDn'),
+  run:$('btnRun'),up:$('btnJackUp'),dn:$('btnJackDn'),
+  travH:$('btnTravH'),travL:$('btnTravL'),statH:$('btnStatH'),statL:$('btnStatL'),
   bleed:$('btnBleed'),pump:$('btnPump')};
+const slipBtns=[ui.travH,ui.travL,ui.statH,ui.statL];
 let toastT=0;
 function toast(msg, info=false){
   ui.toast.textContent=msg; ui.toast.className='show'+(info?' info':''); toastT=2.2;
@@ -695,9 +763,9 @@ function drawDiagram(){
   g.fillStyle='#b8c2cc'; g.fillRect(cx-3,top-16,6,Math.max(2,pipeBot-top+16));
   g.fillStyle='#c9a13a'; g.beginPath();
   g.moveTo(cx-5,pipeBot); g.lineTo(cx+5,pipeBot); g.lineTo(cx,pipeBot+7); g.fill();
-  // joint ticks on pipe
+  // tool-joint ticks at true joint boundaries
   g.fillStyle='#c9a13a';
-  for(let j=JOINT;j<st.depth;j+=JOINT){ const y=yOf(j); g.fillRect(cx-4,y,8,2); }
+  for(const c of st.jointCum){ if(c>=st.depth) break; g.fillRect(cx-4,yOf(c),8,2); }
   // objective marker (stage-aware)
   g.font='bold 10px Consolas';
   if(st.stage==='in'){
@@ -765,20 +833,33 @@ function holdBtn(el,key){
 }
 holdBtn(ui.up,'up'); holdBtn(ui.dn,'dn'); holdBtn(ui.bleed,'bleed'); holdBtn(ui.pump,'pump');
 
+// which: 'travH' | 'travL' | 'statH' | 'statL'
 function setSlip(which,val){
   if(st.mode==='auto' && st.autoRun) return;
-  if(which==='trav'){ if(st.trav!==val){st.trav=val; AudioFX.clack();} }
-  else { if(st.stat!==val){st.stat=val; AudioFX.clack();} }
+  if(st[which]===val) return;
+  // slips cannot close on a tool joint
+  if(val){
+    const y = which.startsWith('trav') ? travSlipY() : statSlipY();
+    if(collarAt(y)){
+      toast('TOOL JOINT IN THE '+(which.startsWith('trav')?'TRAVELING':'STATIONARY')+' SLIPS — MOVE PIPE');
+      AudioFX.beep(150,0.15,0.3);
+      return;
+    }
+  }
+  st[which]=val; AudioFX.clack();
   refreshSlipBtns();
 }
-ui.trav.onclick=()=>{AudioFX.init(); setSlip('trav',!st.trav);};
-ui.stat.onclick=()=>{AudioFX.init(); setSlip('stat',!st.stat);};
+ui.travH.onclick=()=>{AudioFX.init(); setSlip('travH',!st.travH);};
+ui.travL.onclick=()=>{AudioFX.init(); setSlip('travL',!st.travL);};
+ui.statH.onclick=()=>{AudioFX.init(); setSlip('statH',!st.statH);};
+ui.statL.onclick=()=>{AudioFX.init(); setSlip('statL',!st.statL);};
 function refreshSlipBtns(){
-  ui.trav.classList.toggle('engaged',st.trav);
-  ui.stat.classList.toggle('engaged',st.stat);
-  ui.trav.innerHTML=(st.trav?'TRAVELING SLIPS ✔ SET':'TRAVELING SLIPS — OPEN')+' <span class="kbd">[E]</span>';
-  ui.stat.innerHTML=(st.stat?'STATIONARY SLIPS ✔ SET':'STATIONARY SLIPS — OPEN')+' <span class="kbd">[Q]</span>';
+  ui.travH.classList.toggle('engaged',st.travH);
+  ui.travL.classList.toggle('engaged',st.travL);
+  ui.statH.classList.toggle('engaged',st.statH);
+  ui.statL.classList.toggle('engaged',st.statL);
 }
+$('annSlider').addEventListener('input',e=>{ st.annular=+e.target.value; });
 
 function setMode(m){
   st.mode=m; st.autoRun=false; st.phase='idle';
@@ -787,7 +868,7 @@ function setMode(m){
   ui.run.disabled = m!=='auto';
   ui.run.textContent='▶ RUN AUTO CYCLE'; ui.run.classList.remove('run-on');
   const man=m==='manual';
-  [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=!man);
+  [ui.up,ui.dn,...slipBtns].forEach(b=>b.disabled=!man);
   toast(m==='auto'?'AUTO: rig runs slips & jack — you manage pressure':'MANUAL: you run everything',true);
 }
 $('modeMan').onclick=()=>{AudioFX.init(); setMode('manual');};
@@ -802,8 +883,8 @@ $('dirOut').onclick=()=>setDir(-1);
 ui.run.onclick=()=>{ AudioFX.init(); st.autoRun=!st.autoRun; st.phase='idle';
   ui.run.textContent=st.autoRun?'⏸ PAUSE CYCLE':'▶ RUN AUTO CYCLE';
   ui.run.classList.toggle('run-on',st.autoRun);
-  if(st.autoRun){ [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=true); }
-  else if(st.mode==='manual'){ [ui.up,ui.dn,ui.trav,ui.stat].forEach(b=>b.disabled=false); }
+  if(st.autoRun){ [ui.up,ui.dn,...slipBtns].forEach(b=>b.disabled=true); }
+  else if(st.mode==='manual'){ [ui.up,ui.dn,...slipBtns].forEach(b=>b.disabled=false); }
 };
 
 $('sndBtn').onclick=()=>{ AudioFX.init(); $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; };
@@ -816,8 +897,12 @@ addEventListener('keydown',e=>{
     case 's': case 'arrowdown': st.held.dn=true; ui.dn.classList.add('held'); break;
     case 'b': st.held.bleed=true; ui.bleed.classList.add('held'); break;
     case 'p': st.held.pump=true; ui.pump.classList.add('held'); break;
-    case 'q': if(st.mode==='manual') setSlip('stat',!st.stat); break;
-    case 'e': if(st.mode==='manual') setSlip('trav',!st.trav); break;
+    case 'q': if(st.mode==='manual') setSlip('statH',!st.statH); break;
+    case 'a': if(st.mode==='manual') setSlip('statL',!st.statL); break;
+    case 'e': if(st.mode==='manual') setSlip('travH',!st.travH); break;
+    case 'd': if(st.mode==='manual') setSlip('travL',!st.travL); break;
+    case 'z': st.held.annDn=true; break;
+    case 'x': st.held.annUp=true; break;
     case 'm': $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; break;
     case 'escape': setPaused(!st.paused); break;
   }
@@ -828,6 +913,8 @@ addEventListener('keyup',e=>{
     case 's': case 'arrowdown': st.held.dn=false; ui.dn.classList.remove('held'); break;
     case 'b': st.held.bleed=false; ui.bleed.classList.remove('held'); break;
     case 'p': st.held.pump=false; ui.pump.classList.remove('held'); break;
+    case 'z': st.held.annDn=false; break;
+    case 'x': st.held.annUp=false; break;
   }
 });
 
@@ -845,12 +932,17 @@ function startLevel(lvl){
     stage: cfg.objective==='trip-out' ? 'out' : 'in',
     stageStartDepth:cfg.startDepth,
     mapDepth:Math.max(cfg.target,cfg.startDepth),
-    depth:cfg.startDepth, jack:0, trav:false, stat:true, travAnim:0, statAnim:1,
+    depth:cfg.startDepth, prevDepth:cfg.startDepth, jack:0,
+    travH:false, travL:false, statH:true, statL:true,
+    travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
     autoRun:false, phase:'idle',
     P:cfg.p0, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
+    annular:60, annReq:35, annWarnT:0,
     jointsDone:0, lastJoints:0, levelT:0, pipeV:0,
     failing:false, failAnimT:0, shake:0,
   });
+  Object.assign(st, makeJointTable(st.mapDepth));
+  st.wasLight=pipeLight();
   setDir(st.stage==='out' ? -1 : 1); setMode(st.mode); refreshSlipBtns();
   $('ovlPause').classList.add('hidden'); $('pauseBtn').textContent='⏸';
   ui.lvl.textContent=lvl;
@@ -931,15 +1023,17 @@ const TUT_STEPS=[
   '<br><br>The machine is simple: a <b>hydraulic jack</b> that strokes up and down, and <b>two sets of slips</b> '+
   '(pipe grippers). At least one set must be gripping the pipe at all times. The whole game is sequencing them correctly '+
   'while keeping the well pressure under control.'},
- {title:'TRAVELING SLIPS [E]', body:
-  'The <b>traveling slips</b> ride on the jack\'s moving head.'+
-  '<br><br>When they are <b>SET</b> (gripping), the pipe moves with the jack — stroke down to push pipe in, '+
-  'stroke up to pull it out. They are how the pipe actually travels.'},
- {title:'STATIONARY SLIPS [Q]', body:
-  'The <b>stationary slips</b> are fixed to the top of the BOP stack. They hold the pipe still while the jack '+
-  'repositions for the next stroke.'+
-  '<br><br>Rule of thumb: <b>swap grips one at a time</b>. Set the new slips, confirm they\'ve closed, then release the old ones. '+
-  'If both are open, nothing holds the pipe. If both are set, the jack locks.'},
+ {title:'TRAVELING SLIPS [E/D]', body:
+  'The <b>traveling slips</b> ride on the jack\'s moving plate. When gripping, the pipe moves with the jack — '+
+  'stroke down to push pipe in, stroke up to pull it out.'+
+  '<br><br>There are <b>two sets</b>: <b>HEAVY [E]</b> slips carry pipe-heavy string, and inverted '+
+  '<b>SNUB [D]</b> slips restrain pipe-light string. Only the type matching the load actually holds.'+
+  '<br><br>Slips can <b>never close on a tool joint</b> — if a collar is in the bowl, move the pipe first.'},
+ {title:'STATIONARY SLIPS [Q/A]', body:
+  'The <b>stationary slips</b> sit in the stationary basket on the BOP stack. They hold the pipe while the jack '+
+  'repositions for the next stroke. Same two types: <b>HEAVY [Q]</b> and <b>SNUB [A]</b>.'+
+  '<br><br>Rule of thumb: <b>swap grips one station at a time</b>. Set the new station, confirm it\'s closed, then release the other. '+
+  'If neither station holds, nothing restrains the pipe. If both hold, the jack locks.'},
  {title:'THE JACK STROKE [W/S]', body:
   'The jack has a <b>10 ft stroke</b>. One full snub-in cycle:'+
   '<br><br>1. Jack <b>up</b> empty (stationary holding)<br>2. Set <b>traveling</b>, release <b>stationary</b>'+
@@ -950,16 +1044,17 @@ const TUT_STEPS=[
   'The depth where they balance is the <b>neutral point</b> — the pulsing <b>golden ring</b> on the well diagram and cutaway.'+
   '<br><br>It moves with pressure: bleed off and it rises, pump up and it sinks.'},
  {title:'PIPE LIGHT vs PIPE HEAVY', body:
-  'Less pipe in the hole than the neutral point → <b>PIPE LIGHT</b>: the well wins, and ungripped pipe '+
-  '<b>launches out of the hole</b>.'+
-  '<br><br>More pipe than the neutral point → <b>PIPE HEAVY</b>: gravity wins, and ungripped pipe <b>drops down the well</b>.'+
-  '<br><br>Either way: never leave both slips open. The badge under the gauge always shows your current state.'},
- {title:'PRESSURE CONTROL [B/P]', body:
-  'Keep the gauge needle in the <b>green band</b>.'+
-  '<br><br>Pushing pipe <b>in</b> displaces fluid and <b>surges pressure up</b> → <b>BLEED [B]</b> it off.'+
-  '<br>Pulling pipe <b>out</b> swabs pressure <b>down</b> → <b>PUMP [P]</b> it back up.'+
-  '<br><br>Too high: the seals wear and the BOP lets go. Too low: the well <b>kicks</b> gas at you. '+
-  'Bigger pipe surges harder — watch out on big-bore wells.'},
+  'Less pipe in the hole than the neutral point → <b>PIPE LIGHT</b>: the well wins, and only <b>SNUB slips</b> hold it. '+
+  'Heavy slips alone will let it <b>launch out of the hole</b>.'+
+  '<br><br>More pipe than the neutral point → <b>PIPE HEAVY</b>: gravity wins, and only <b>HEAVY slips</b> carry it. '+
+  'Snub slips alone will let it <b>drop down the well</b>.'+
+  '<br><br>Crossing the neutral point? Set <b>both types</b> through the transition. The badge under the gauge always shows your state.'},
+ {title:'PRESSURE & THE ANNULAR [B/P · Z/X]', body:
+  'Keep the gauge needle in the <b>green band</b>: stripping <b>in</b> surges pressure up → <b>BLEED [B]</b>; '+
+  'pulling <b>out</b> swabs it down → <b>PUMP [P]</b>. Too high wrecks the BOP; too low invites a <b>gas kick</b>.'+
+  '<br><br>The <b>annular closing pressure [Z/X]</b> squeezes the sealing element around the pipe. '+
+  'Keep it at the <b>REQUIRED</b> value: too low and gas leaks past (watch the puffs as tool joints pass through), '+
+  'too high and friction chews the element while you strip.'},
 ];
 let tutIdx=0, tutThen=null;
 function showTutorial(then){ tutIdx=0; tutThen=then||null; renderTut();
@@ -1004,38 +1099,46 @@ function autoStep(dt){
   // jack target positions: gripped stroke moves head DOWN for snub-in
   const strokeEnd = inDir ? 0 : STROKE;     // gripped travel destination
   const returnEnd = inDir ? STROKE : 0;     // empty travel destination
+  // auto sets BOTH slip types at a station (safe through neutral-point
+  // transitions, like a crew belt-and-bracing near the balance point)
   let jv=0;
   switch(st.phase){
     case 'idle':
       st.phase = Math.abs(st.jack-returnEnd)<0.05 ? 'grip' : 'prep';
-      if(!st.stat){ st.stat=true; AudioFX.clack(); refreshSlipBtns(); }
-      if(st.trav){ st.trav=false; AudioFX.clack(); refreshSlipBtns(); }
+      if(!st.statH||!st.statL){ st.statH=st.statL=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(st.travH||st.travL){ st.travH=st.travL=false; AudioFX.clack(); refreshSlipBtns(); }
       break;
     case 'prep': // run jack empty to return end (stationary holds pipe)
-      if(statGrip() && st.travAnim<0.05){
+      if(statHolds() && st.travHAnim<0.05 && st.travLAnim<0.05){
         jv = Math.sign(returnEnd-st.jack)*JACK_SPD_AUTO;
         if(Math.abs(returnEnd-st.jack)<0.08){ jv=0; st.phase='grip'; }
       }
       break;
     case 'grip':
-      if(!st.trav){ st.trav=true; AudioFX.clack(); refreshSlipBtns(); }
-      if(st.travAnim>0.97) st.phase='unset';
+      if(collarAt(travSlipY())){            // can't close on a tool joint — shift the head
+        jv = st.jack>STROKE/2 ? -2.5 : 2.5; break;
+      }
+      if(!st.travH||!st.travL){ st.travH=st.travL=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(Math.min(st.travHAnim,st.travLAnim)>0.97) st.phase='unset';
       break;
     case 'unset':
-      if(st.stat){ st.stat=false; AudioFX.clack(); refreshSlipBtns(); }
-      if(st.statAnim<0.03) st.phase='stroke';
+      if(st.statH||st.statL){ st.statH=st.statL=false; AudioFX.clack(); refreshSlipBtns(); }
+      if(Math.max(st.statHAnim,st.statLAnim)<0.03) st.phase='stroke';
       break;
     case 'stroke': // gripped travel — pipe moves
       jv = Math.sign(strokeEnd-st.jack)*JACK_SPD_AUTO;
       if(Math.abs(strokeEnd-st.jack)<0.08){ jv=0; st.phase='set'; }
       break;
     case 'set':
-      if(!st.stat){ st.stat=true; AudioFX.clack(); refreshSlipBtns(); }
-      if(st.statAnim>0.97) st.phase='ungrip';
+      if(collarAt(statSlipY())){            // shift the pipe slightly to clear the joint
+        jv = st.jack<0.6 ? 2.5 : (st.jack>STROKE-0.6 ? -2.5 : (inDir?2.5:-2.5)); break;
+      }
+      if(!st.statH||!st.statL){ st.statH=st.statL=true; AudioFX.clack(); refreshSlipBtns(); }
+      if(Math.min(st.statHAnim,st.statLAnim)>0.97) st.phase='ungrip';
       break;
     case 'ungrip':
-      if(st.trav){ st.trav=false; AudioFX.clack(); refreshSlipBtns(); }
-      if(st.travAnim<0.03) st.phase='prep';
+      if(st.travH||st.travL){ st.travH=st.travL=false; AudioFX.clack(); refreshSlipBtns(); }
+      if(Math.max(st.travHAnim,st.travLAnim)<0.03) st.phase='prep';
       break;
   }
   return jv;
@@ -1044,11 +1147,11 @@ function autoStep(dt){
 /* ============ 10. SIMULATION UPDATE ============ */
 function update(dt){
   if(st.paused) return;
-  // slip animation
-  st.travAnim += ((st.trav?1:0)-st.travAnim) * Math.min(1, dt/SLIP_TIME*1.6);
-  st.statAnim += ((st.stat?1:0)-st.statAnim) * Math.min(1, dt/SLIP_TIME*1.6);
-  st.travAnim = st.trav ? Math.min(1,st.travAnim+dt/SLIP_TIME*0.4) : Math.max(0,st.travAnim-dt/SLIP_TIME*0.4);
-  st.statAnim = st.stat ? Math.min(1,st.statAnim+dt/SLIP_TIME*0.4) : Math.max(0,st.statAnim-dt/SLIP_TIME*0.4);
+  // slip animations (4 independent wedge sets)
+  for(const k of ['travH','travL','statH','statL']){
+    const a=k+'Anim';
+    st[a] = st[k] ? Math.min(1,st[a]+dt/SLIP_TIME) : Math.max(0,st[a]-dt/SLIP_TIME);
+  }
 
   if(!st.playing) { AudioFX.setHyd(0); AudioFX.setHiss(0); return; }
 
@@ -1086,7 +1189,7 @@ function update(dt){
   if(st.mode==='auto') jv += autoStep(dt);
 
   // constraints
-  const tg=travGrip(), sg=statGrip();
+  const tg=travHolds(), sg=statHolds();
   if(tg && sg && jv!==0){
     jv=0; st.lockWarnT+=dt;
     if(st.lockWarnT>0.4){ toast('BOTH SLIPS SET — JACK LOCKED'); st.lockWarnT=0; AudioFX.beep(220,0.1,0.2); }
@@ -1102,18 +1205,35 @@ function update(dt){
     dDepth=nd-st.depth; st.depth=nd;
   }
   st.pipeV = dDepth/Math.max(dt,1e-4);
+  const moving=Math.abs(st.pipeV)>0.2;
   AudioFX.setHyd(Math.min(1,Math.abs(jv)/JACK_SPD_MAN));
 
-  // runaway check — nothing holding the pipe
-  if(!tg && !sg && st.travAnim<0.85 && st.statAnim<0.85){
+  // neutral-point crossing — the holding slip type just changed
+  const lightNow=pipeLight();
+  if(st.wasLight!==lightNow){
+    st.wasLight=lightNow;
+    toast('NEUTRAL POINT CROSSED — PIPE NOW '+(lightNow?'LIGHT':'HEAVY')+' — CHECK SLIP TYPE',true);
+    AudioFX.beep(520,0.2,0.3);
+  }
+
+  // runaway check — nothing effectively holding the pipe
+  if(!tg && !sg){
     st.runawayT+=dt;
-    if(st.runawayT>0.25 && st.runawayT<0.9){
-      toast(pipeLight()?'⚠ NOTHING HOLDING PIPE — IT WILL LAUNCH!':'⚠ NOTHING HOLDING PIPE — STRING WILL DROP!');
+    const wrongType=anySlipSet();
+    if(st.runawayT>0.25 && st.runawayT<1.1){
+      toast(wrongType
+        ? (lightNow?'⚠ HEAVY SLIPS WON\'T HOLD LIGHT PIPE — SET SNUB SLIPS!'
+                   :'⚠ SNUB SLIPS WON\'T HOLD HEAVY PIPE — SET HEAVY SLIPS!')
+        : (lightNow?'⚠ NOTHING HOLDING PIPE — IT WILL LAUNCH!'
+                   :'⚠ NOTHING HOLDING PIPE — STRING WILL DROP!'));
       AudioFX.setAlarm(Math.sin(performance.now()/60)>0?1:0);
     }
-    if(st.runawayT>0.9){
-      fail(pipeLight()?'Pipe launched out of the hole — nothing was gripping it while pipe-light.'
-                      :'String dropped down the well — nothing was gripping it while pipe-heavy.');
+    if(st.runawayT>1.1){
+      fail(lightNow
+        ? (wrongType?'Heavy slips can\'t restrain pipe-light string — the well launched it. Use SNUB slips above the neutral point.'
+                    :'Pipe launched out of the hole — nothing was gripping it while pipe-light.')
+        : (wrongType?'Snub slips can\'t carry pipe-heavy string — it fell down the well. Use HEAVY slips below the neutral point.'
+                    :'String dropped down the well — nothing was gripping it while pipe-heavy.'));
       return;
     }
   } else st.runawayT=0;
@@ -1123,15 +1243,42 @@ function update(dt){
   st.P += st.surge*dDepth;                // surge/swab scales with pipe displacement
   if(st.held.bleed){ st.P=Math.max(0,st.P-BLEED_RATE*dt); }
   if(st.held.pump){ st.P+=PUMP_RATE*dt; }
-  AudioFX.setHiss(st.held.bleed?1:0);
   if(st.kicking){
     st.P+=140*dt;
     AudioFX.setRumble(0.5);
     if(st.P>st.p0){ st.kicking=false; AudioFX.setRumble(0); toast('KICK CIRCULATED OUT',true); }
   }
 
-  // seal wear
-  const moving=Math.abs(st.pipeV)>0.2;
+  // annular closing pressure — must track wellhead pressure
+  if(st.held.annDn) st.annular=Math.max(0,st.annular-30*dt);
+  if(st.held.annUp) st.annular=Math.min(100,st.annular+30*dt);
+  st.annReq=Math.min(95, 35+Math.max(0,(st.P-st.p0)/12));
+  const annLeak = st.annular < st.annReq-4;
+  const annOver = st.annular > st.annReq+28;
+  AudioFX.setHiss(Math.max(st.held.bleed?1:0, annLeak?0.35:0));
+  if(annLeak){
+    st.seal-=2.5*dt; st.P=Math.max(0,st.P-8*dt);
+    if(Math.random()<0.35)
+      gasFx.spawn(rnd(-0.4,0.4),5.2,rnd(-0.4,0.4),rnd(-0.4,0.4),rnd(1,2.5),rnd(-0.4,0.4),rnd(0.8,1.8));
+    st.annWarnT+=dt;
+    if(st.annWarnT>2.5){ st.annWarnT=0; toast('ANNULAR LEAKING — RAISE CLOSING PRESSURE [X]'); }
+  } else st.annWarnT=0;
+  if(annOver && moving) st.seal-=3*dt;     // over-squeezed: friction chews the element
+
+  // gas release as tool joints pass through the annular
+  const annFt = 4.6/Y_SCALE;
+  for(const c of st.jointCum){
+    const a=c-st.prevDepth-annFt, b=c-st.depth-annFt;
+    if(a!==b && ((a<=0&&b>0)||(a>=0&&b<0))){
+      const n=annLeak?10:4, v=annLeak?0.45:0.18;
+      for(let i=0;i<n;i++)
+        gasFx.spawn(rnd(-0.35,0.35),5.2,rnd(-0.35,0.35),rnd(-0.7,0.7),rnd(1.5,3.5),rnd(-0.7,0.7),rnd(0.6,1.5));
+      AudioFX.puff(v);
+    }
+  }
+  st.prevDepth=st.depth;
+
+  // seal wear from stripping against pressure
   if(moving && st.P>st.p0+250) st.seal-=5*dt;
   if(st.P>st.p0+450) st.seal-=9*dt;
   if(st.seal<=0){ fail('Annular seal destroyed — stripped pipe too hard against high pressure.'); return; }
@@ -1187,6 +1334,11 @@ function refreshHUD(dt){
   const si=stageInfo();
   ui.joints.textContent=si.joints+'/'+si.jointsTotal;
   $('hudObj').textContent = st.stage==='in' ? 'SNUB IN → '+st.target+' ft' : 'TRIP OUT → SURFACE';
+  $('annSlider').value=Math.round(st.annular);
+  const ai=$('annInfo'), req=Math.round(st.annReq);
+  ai.textContent='SET '+Math.round(st.annular)+' · REQUIRED ~'+req;
+  ai.style.color = st.annular<st.annReq-4 ? '#ff4d4d'
+                 : st.annular>st.annReq+28 ? '#ffd23d' : '#3ddc7a';
   ui.seal.style.width=Math.max(0,st.seal)+'%';
   ui.seal.style.background=st.seal>50?'linear-gradient(90deg,#3ddc7a,#9fe870)':
     st.seal>25?'linear-gradient(90deg,#ffd23d,#ffb45e)':'linear-gradient(90deg,#ff4d4d,#ff8080)';
@@ -1220,16 +1372,22 @@ function frame(){
   const jacking=Math.abs(st.pipeV)>0.2||st.held.up||st.held.dn||(st.autoRun&&(st.phase==='stroke'||st.phase==='prep'));
   for(const m of rodGlowMats){ m.emissive=new THREE.Color(0x66c2ff);
     m.emissiveIntensity=jacking?0.5+0.3*Math.sin(performance.now()/90):0; }
-  // slips wedges slide
-  for(const w of travWedges) w.m.position.x=w.side*(0.62-0.32*st.travAnim);
-  for(const w of statWedges) w.m.position.x=w.side*(0.64-0.32*st.statAnim);
+  // slip wedges slide (heavy + snub pairs per station)
+  for(const w of travHW) w.m.position.x=w.side*(0.62-0.32*st.travHAnim);
+  for(const w of travLW) w.m.position.x=w.side*(0.60-0.32*st.travLAnim);
+  for(const w of statHW) w.m.position.x=w.side*(0.64-0.32*st.statHAnim);
+  for(const w of statLW) w.m.position.x=w.side*(0.62-0.32*st.statLAnim);
 
-  // collars travel with pipe (depth-based, schematic)
-  const travel=st.depth*Y_SCALE;
+  // tool-joint collars at their true positions along the string
+  // (visible only between the BOP top and the pipe rack-off height)
+  const cys=[];
+  for(const c of st.jointCum){
+    const y=(c-st.depth)*Y_SCALE;
+    if(y>5.4 && y<14.6) cys.push(y);
+  }
   for(let i=0;i<collars.length;i++){
-    let y=(((i*3.5 - travel) % 31.5)+31.5)%31.5;   // 0..31.5
-    collars[i].position.y = 15 - y;
-    collars[i].visible = collars[i].position.y < 14.6;
+    if(i<cys.length){ collars[i].visible=true; collars[i].position.y=cys[i]; }
+    else collars[i].visible=false;
   }
   // bit + markers in cutaway
   bit.position.y=depthToCutY(st.depth)-0.4;

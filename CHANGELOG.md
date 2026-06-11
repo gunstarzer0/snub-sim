@@ -3,6 +3,22 @@
 All notable changes to SNUB FORCE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/) (pre-1.0: minor = feature round, patch = fixes/balance).
 
+## [0.3.0] — 2026-06-10
+
+### Added
+- **Four slip sets** — heavy + snub (inverted) slips at both the traveling plate and the stationary basket, with distinct 3D wedges (yellow = heavy, blue = snub). Heavy slips only carry pipe-heavy string; snub slips only restrain pipe-light string — the wrong type for the load won't hold, with specific runaway warnings/fail reasons. Keys: `Q/A` stationary, `E/D` traveling. Auto mode sets both types at a station (safe through neutral-point transitions); a toast warns when the string crosses the neutral point.
+- **Annular closing pressure control** — slider + `Z/X` keys with a live REQUIRED value that tracks wellhead pressure. Under-squeezed: gas leaks past the element (particles, hiss, seal wear, slow pressure bleed-down). Over-squeezed: friction wear while stripping.
+- **Gas release at tool joints** — every collar passing through the annular vents a visible puff with a synthesized hiss; much larger when the annular is leaking.
+- **Realistic joint tally** — joints are generated per level at ~10 m (32.8 ft) each with ±0.5 m variation. Joint counting, scoring, well-diagram ticks, and 3D collar positions all derive from the same table.
+- **Slips refuse to close on a tool joint** — manual attempts are rejected with a warning; the auto sequencer nudges the jack (or the pipe) to clear the collar before setting.
+
+### Fixed
+- **Pipe/collar animation direction** — tool-joint collars previously moved opposite to actual pipe travel; they now sit at their true positions along the string and move with it.
+
+### Changed
+- Runaway grace period 0.9 s → 1.1 s to account for the richer slip decisions.
+- Slip animation logic simplified to one linear actuator per wedge set.
+
 ## [0.2.0] — 2026-06-10
 
 ### Added
