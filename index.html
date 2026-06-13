@@ -783,8 +783,8 @@ function brandTheJack(){
     const bx=box(3.62,0.16,0.14,hazMat); bx.position.set(0,5.46,s*1.8); rig.add(bx);
     const bz=box(0.14,0.16,3.62,hazMat); bz.position.set(s*1.8,5.46,0); rig.add(bz);
   }
-  // brand sign on the front face of the jack base
-  const sign=brandSign(3.0,0.62); sign.position.set(0,5.4,1.81); rig.add(sign);
+  // brand decal sized to the front face of the jack base plate
+  const sign=brandSign(3.0,0.24); sign.position.set(0,5.4,1.81); rig.add(sign);
   // yellow accent collars on the hydraulic barrels
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     const ring=cyl(0.27,0.27,0.12,M.yellow); ring.position.set(sx*1.25,5.5+2.78,sz*1.25); rig.add(ring);
@@ -811,8 +811,8 @@ function createBasketDetails(){
     const r1=box(4.7,0.05,0.05,M.rail); r1.position.set(0,bY+0.62,s*2.3); rig.add(r1);
     const r2=box(0.05,0.05,4.7,M.rail); r2.position.set(s*2.3,bY+0.62,0); rig.add(r2);
   }
-  // brand sign on the basket rail facing out (+z front)
-  const sign=brandSign(3.2,0.5); sign.position.set(0,bY+1.15,2.34); rig.add(sign);
+  // brand banner hung from the basket top rail facing out (+z front)
+  const sign=brandSign(3.0,0.55); sign.position.set(0,bY+0.85,2.34); rig.add(sign);
   // control console with levers + small indicator lights (back-left corner)
   const con=new THREE.Group(); con.position.set(-1.55,bY+0.1,-1.55); rig.add(con);
   const cab=box(1.1,0.9,0.5,M.black); cab.position.y=0.55; shadowed(cab); con.add(cab);
@@ -839,7 +839,7 @@ function createBasketDetails(){
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     const lm=new THREE.MeshStandardMaterial({color:0xfff2c8, emissive:0xffe6a0, emissiveIntensity:1.6});
     const fix=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.1,0.08),lm);
-    fix.position.set(sx*2.28,bY+1.7,sz*2.28); rig.add(fix);
+    fix.position.set(sx*2.28,bY+1.28,sz*2.28); rig.add(fix);
     flickerMats.push({mat:lm, base:1.4, amt:0.25});
   }
 }
@@ -889,8 +889,8 @@ function createLeasePad(){
     scene.add(cn);
     const cb=box(0.42,0.06,0.42,M.matblk); cb.position.set(p[0],0.05,p[1]); scene.add(cb);
   }
-  // work-light tower poles around the pad
-  for(const p of [[-9,4],[9,4],[-9,-16],[16,-10]]){
+  // work-light tower poles around the pad (kept behind the cut plane, bases on the gravel)
+  for(const p of [[-10,-3],[10,-3],[-9,-16],[16,-10]]){
     const pole=cyl(0.1,0.12,7,M.steelDk); pole.position.set(p[0],3.5,p[1]); shadowed(pole); scene.add(pole);
     for(let i=-1;i<=1;i++){
       const lm=new THREE.MeshStandardMaterial({color:0xfff4d0, emissive:0xffe9a8, emissiveIntensity:1.8});
@@ -928,7 +928,7 @@ function createCatwalkAndPipeRack(){
   // stacked joint inventory on the rack (lying along X; group is offset z=-5)
   JH = JH || {};
   JH.rackJoints=[];
-  const rows=[[-2.4,1.7],[-1.7,1.7],[-1.0,1.7],[-2.05,2.35],[-1.35,2.35]];
+  const rows=[[-2.4,1.7],[-1.7,1.7],[-1.0,1.7],[-2.05,2.04],[-1.35,2.04]];
   for(const [z,y] of rows){
     const j=cyl(0.17,0.17,JH_LEN,M.pipe); j.rotation.z=Math.PI/2; j.position.set(12.5,y,z);
     shadowed(j); grp.add(j);
@@ -942,8 +942,8 @@ function createCatwalkAndPipeRack(){
 // --- crane boom + sheave + winch + elevators + animated joint ---
 function createJointHandlingSystem(){
   JH = JH || {};
-  const apex={x:0,y:BASKET_Y+3.4,z:0};
-  const tip ={x:6.0,y:BASKET_Y+2.2,z:-3.0};          // boom tip out over the catwalk
+  const apex={x:0,y:BASKET_Y+4.6,z:0};
+  const tip ={x:5.4,y:BASKET_Y+4.0,z:-2.6};          // boom tip out over the catwalk, above the lift travel
   // boom from gin-pole apex out to the tip
   const boomLen=Math.hypot(tip.x-apex.x,tip.y-apex.y,tip.z-apex.z);
   const boom=cyl(0.1,0.12,boomLen,M.yellow);
@@ -983,8 +983,8 @@ function createJointHandlingSystem(){
     elev, joint, jbody, line, lineGeo,
     park:{x:drumPos.x,y:drumPos.y-0.3,z:drumPos.z},
     rest:{x:12.5,y:1.9,z:-6.4},      // top rack joint, world space (rack group offset z=-5)
-    lift:{x:10.5,y:7.8,z:-4.5},
-    align:{x:0,y:11.4,z:0} });
+    lift:{x:6.5,y:8.5,z:-3.2},        // stood vertical, drawn in under the sheave
+    align:{x:0,y:12.0,z:0} });        // stabbed at well centre (bottom ~7.9, into the slip bowl)
 }
 
 // the +Y-local end of the joint (where elevators latch) for a given centre + roll
@@ -1034,6 +1034,9 @@ function updateJointHandling(dt){
   } else { c={...JH.align}; rotZ=0; }
   setJhStatus('JOINT HANDLING · '+seg.label);
   JH.joint.position.set(c.x,c.y,c.z); JH.joint.rotation.z=rotZ;
+  // once stabbed (aligned) the slips take the load: elevators unlatch, winch line goes slack
+  const latched = seg.name!=='aligned';
+  JH.elev.visible=latched; JH.line.visible=latched;
   // elevators ride the upper end of the joint (latch on during 'attaching')
   const end=jointEnd(c,rotZ);
   if(seg.name==='attaching'){
@@ -1108,7 +1111,10 @@ const cam    ={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6, tz:0};
 const camGoal={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6, tz:0};
 let camUser=false;                 // user has taken control -> stop the idle auto-spin
 const clampCam=()=>{ camGoal.pitch=Math.max(-0.15,Math.min(1.2,camGoal.pitch));
-  camGoal.dist=Math.max(8,Math.min(60,camGoal.dist)); };
+  camGoal.dist=Math.max(8,Math.min(60,camGoal.dist));
+  camGoal.tx=Math.max(-30,Math.min(30,camGoal.tx));
+  camGoal.ty=Math.max(-14,Math.min(28,camGoal.ty));
+  camGoal.tz=Math.max(-40,Math.min(18,camGoal.tz)); };
 const CAM_PRESETS={
   overview:{yaw:0.45, pitch:0.24, dist:40, tx:0, ty:3.5, tz:0},
   basket:  {yaw:0.7,  pitch:0.12, dist:15, tx:0, ty:12.5, tz:0},

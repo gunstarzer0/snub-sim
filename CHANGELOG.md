@@ -3,6 +3,19 @@
 All notable changes to SNUB FORCE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/) (pre-1.0: minor = feature round, patch = fixes/balance).
 
+## [0.4.1] — 2026-06-13
+
+Visual QA & realism tuning of the 0.4.0 additions. Positions/scales/rotations only — no new systems.
+
+### Fixed
+- **Winch cable topology** — raised the crane boom/sheave (`tip.y` → `BASKET_Y+4.0`, sheave ≈16.5) so it sits above the joint's full travel; the hoist line now always runs *downward* from the sheave to the load instead of pointing up at the aligned position.
+- **Pickup arc** — the joint is now drawn in under the sheave as it stands vertical (`lift` → `{6.5,8.5,-3.2}`) for a more natural hoist, then swings to well centre.
+- **Final alignment** — raised the stab position (`align.y` 11.4 → 12.0) so the joint bottom lands in the slip-bowl region (~7.9) rather than hanging short; elevators unlatch and the winch line goes slack once the joint is stabbed (slips take the load).
+- **Branding proportions** — jack-base decal resized to its plate (0.62 → 0.24 tall, no overhang); basket brand banner lowered to hang from the top rail.
+- **Floating detail** — corner work lights seated onto the posts; pipe-rack second row seated on the first.
+- **Lease layout** — moved two work-light towers from `z=+4` (in front of the cut plane, floating off the pad) to behind it, on the gravel.
+- **Camera pan bounds** — `clampCam` now also bounds the focus point (`tx/ty/tz`) so panning can't lose the scene.
+
 ## [0.4.0] — 2026-06-13
 
 Realism & immersion pass — environment, branding, joint handling, and camera. No physics or balance changes.
