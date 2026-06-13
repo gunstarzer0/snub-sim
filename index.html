@@ -104,6 +104,9 @@
     letter-spacing:.6px;color:#ffd23d;background:rgba(20,16,5,.82);border:1px solid var(--line);border-radius:8px;
     padding:5px 16px;z-index:5;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
   #jhStatus.show{opacity:1;}
+  #workflowHint{position:fixed;top:56px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;
+    letter-spacing:.5px;color:#3ddc7a;background:rgba(5,14,8,.82);border:1px solid rgba(61,220,122,.35);
+    border-radius:8px;padding:4px 14px;z-index:5;pointer-events:none;white-space:nowrap;}
   #btnAddJoint.active{background:var(--warn);border-color:var(--warn);color:#14100a;}
   /* rig status panel */
   #statusPanel{font-size:11px;font-family:Consolas,"Cascadia Mono",monospace;}
@@ -123,7 +126,8 @@
   <span class="stat">LEVEL <b id="hudLvl">1</b></span>
   <span class="stat">SCORE <b id="hudScore" class="mono">0</b></span>
   <span class="stat">DEPTH <b id="hudDepth" class="mono">0</b> ft</span>
-  <span class="stat">JOINTS <b id="hudJoints" class="mono">0/8</b></span>
+  <span class="stat">RACK <b id="hudRack" class="mono">10</b></span>
+  <span class="stat">CONN <b id="hudConn" class="mono">0</b></span>
   <span class="stat" id="hudObj">SNUB IN → 240 ft</span>
   <button id="pauseBtn" title="Pause (Esc)">⏸</button>
   <button id="sndBtn" title="Toggle sound (M)">🔊</button>
@@ -193,12 +197,14 @@
 
   <div class="panel-inner" id="statusPanel">
     <h4>RIG STATUS</h4>
+    <div class="srow"><span class="slbl">JOINTS ON RACK</span><span class="sval" id="stRack">10</span></div>
+    <div class="srow"><span class="slbl">JOINTS CONNECTED</span><span class="sval" id="stConn">0</span></div>
+    <div class="srow"><span class="slbl">JOINT STATE</span><span class="sval" id="stJointState">NONE</span></div>
     <div class="srow"><span class="slbl">TRAV SNUB SLIPS</span><span class="sval" id="stTravL">OPEN</span></div>
     <div class="srow"><span class="slbl">TRAV HEAVY SLIPS</span><span class="sval" id="stTravH">OPEN</span></div>
     <div class="srow"><span class="slbl">STAT SNUB SLIPS</span><span class="sval" id="stStatL">CLOSED</span></div>
     <div class="srow"><span class="slbl">STAT HEAVY SLIPS</span><span class="sval" id="stStatH">CLOSED</span></div>
-    <div class="srow"><span class="slbl">TONGS</span><span class="sval" id="stTongs">DISENGAGED</span></div>
-    <div class="srow"><span class="slbl">CRANE HOOK</span><span class="sval" id="stCrane">UNLOADED</span></div>
+    <div class="srow"><span class="slbl">TONGS</span><span class="sval" id="stTongs">IDLE</span></div>
   </div>
 </div>
 
@@ -224,6 +230,7 @@
 
 <div id="toast"></div>
 <div id="jhStatus"></div>
+<div id="workflowHint"></div>
 <div id="hintbar">Drag orbit · Right-drag/Shift pan · Scroll zoom · W/S jack · Q/E trav snub/heavy · A/D stat snub/heavy · B/P pressure · [/] annular · Z joint · X tongs · M sound</div>
 
 <div class="ovl" id="ovlTitle">
@@ -317,6 +324,8 @@ const JACK_SPD_MAN  = 8;    // ft/s
 const JACK_SPD_AUTO = 9;
 const SLIP_TIME = 0.35;     // s to set/pull slips
 const SURGE_K = 3.6;        // psi per ft moved, per in² of pipe area
+const RACK_INIT = 10;             // joints on rack at level start (snub-in)
+const CONN_BASKET_FT = 13.0/0.3; // basket height in game-ft (≈43.33)
 const BLEED_RATE = 230, PUMP_RATE = 170;
 const Y_SCALE = 0.3;        // world units per ft (surface equipment)
 const CUT_TOP = -1.0, CUT_BOT = -14.0;   // cutaway window (world y)
@@ -470,6 +479,8 @@ const st = {
   // pipe & rig — four slips: heavy holds pipe-heavy, snub holds pipe-light
   depth:0, prevDepth:0, jack:0,
   travH:false, travL:false, statH:true, statL:true, tongs:false,
+  rackCount:RACK_INIT, connectedJoints:0, connectedFt:0, breakDepth:-1,
+  addWarnT:0, breakWarnT:0,
   travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
   mode:'manual', dir:1, autoRun:false, phase:'idle',
   // well
@@ -1018,15 +1029,39 @@ function setJhStatus(msg){
   if(!msg){ el.classList.remove('show'); return; }
   el.textContent=msg; el.classList.add('show');
 }
+function updateBreakDepth(){
+  if(st.stage==='out' && st.connectedJoints>=2){
+    const c=st.jointCum[st.connectedJoints-2];
+    st.breakDepth = c - CONN_BASKET_FT;
+  } else { st.breakDepth=-1; }
+}
+function syncRackVisuals(){
+  if(!JH || !JH.rackJoints) return;
+  const show=Math.min(st.rackCount, JH.rackJoints.length);
+  for(let i=0;i<JH.rackJoints.length;i++) JH.rackJoints[i].visible=(i<show);
+}
 const JH_SEQ=[
   {name:'attaching', dur:1.1, label:'ELEVATORS LATCHING'},
   {name:'lifting',   dur:2.2, label:'HOISTING JOINT'},
   {name:'swinging',  dur:2.0, label:'SWINGING TO WELL CENTER'},
-  {name:'aligned',   dur:1.2, label:'ALIGNED — STABBING'},
+  {name:'aligned',   dur:0.8, label:'STABBING INTO BORE'},
 ];
 function startAddJoint(){
-  if(!JH || st.jh.state!=='idle') return;
-  st.jh.state='attaching'; st.jh.t=0; st.jh.step=0;
+  if(!JH || !st.playing) return;
+  if(st.jh.state!=='idle'){
+    toast('JOINT ALREADY IN PROGRESS — COMPLETE CURRENT OPERATION'); return;
+  }
+  if(st.stage==='out'){
+    toast('CANNOT ADD JOINT WHILE TRIPPING OUT'); return;
+  }
+  if(st.rackCount<=0){
+    toast('NO JOINTS ON RACK'); AudioFX.beep(150,0.15,0.3); return;
+  }
+  // hide the top visible rack joint
+  const show=JH.rackJoints.filter(j=>j.visible).length;
+  if(show>0) JH.rackJoints[show-1].visible=false;
+  st.rackCount--;
+  st.jh.state='picking'; st.jh.t=0; st.jh.step=0;
   JH.joint.visible=true; JH.elev.visible=true; JH.line.visible=true;
   AudioFX.clack();
   document.getElementById('btnAddJoint').classList.add('active');
@@ -1034,56 +1069,139 @@ function startAddJoint(){
 function updateJointHandling(dt){
   if(!JH) return;
   const J=st.jh;
-  // resolve current centre + roll of the joint
-  let c, rotZ;
+  document.getElementById('btnAddJoint').classList.toggle('active', J.state!=='idle');
+
   if(J.state==='idle'){
     setJhStatus(null);
     JH.joint.visible=false; JH.elev.visible=false; JH.line.visible=false;
-    document.getElementById('btnAddJoint').classList.remove('active');
+    $('btnTongs').classList.remove('engaged');
     return;
   }
-  J.t+=dt;
-  const seg=JH_SEQ[J.step];
-  const p=Math.min(1, J.t/seg.dur);
-  const e=easeIO(p);
-  if(seg.name==='attaching'){ c={...JH.rest}; rotZ=Math.PI/2; }
-  else if(seg.name==='lifting'){
-    c={ x:lerp(JH.rest.x,JH.lift.x,e), y:lerp(JH.rest.y,JH.lift.y,e), z:lerp(JH.rest.z,JH.lift.z,e) };
-    rotZ=lerp(Math.PI/2,0,e);
-  } else if(seg.name==='swinging'){
-    c={ x:lerp(JH.lift.x,JH.align.x,e), y:lerp(JH.lift.y,JH.align.y,e), z:lerp(JH.lift.z,JH.align.z,e) };
-    rotZ=0;
-  } else { c={...JH.align}; rotZ=0; }
-  setJhStatus('JOINT HANDLING · '+seg.label);
-  JH.joint.position.set(c.x,c.y,c.z); JH.joint.rotation.z=rotZ;
-  // once stabbed (aligned) the slips take the load: elevators unlatch, winch line goes slack
-  const latched = seg.name!=='aligned';
-  JH.elev.visible=latched; JH.line.visible=latched;
-  // elevators ride the upper end of the joint (latch on during 'attaching')
-  const end=jointEnd(c,rotZ);
-  if(seg.name==='attaching'){
-    JH.elev.position.set(lerp(JH.park.x,end.x,e), lerp(JH.park.y,end.y,e), lerp(JH.park.z,end.z,e));
-  } else {
-    JH.elev.position.set(end.x,end.y,end.z);
-  }
-  JH.elev.rotation.z=rotZ;
-  // winch line: drum -> sheave -> elevator
-  const pts=JH.lineGeo.attributes.position.array;
-  pts[0]=JH.drumPos.x; pts[1]=JH.drumPos.y; pts[2]=JH.drumPos.z;
-  pts[3]=JH.sheavePos.x; pts[4]=JH.sheavePos.y; pts[5]=JH.sheavePos.z;
-  pts[6]=JH.elev.position.x; pts[7]=JH.elev.position.y+0.3; pts[8]=JH.elev.position.z;
-  JH.lineGeo.attributes.position.needsUpdate=true;
-  // advance the state machine
-  if(p>=1){
-    J.t=0; J.step++;
-    if(J.step>=JH_SEQ.length){
-      J.state='idle'; J.staged++;
-      toast('JOINT STACKED & READY — '+J.staged+' staged this shift', true);
-      AudioFX.beep(660,0.16,0.3);
-    } else {
-      J.state=JH_SEQ[J.step].name;
-      AudioFX.clack();
+
+  // --- PICKING phase: runs JH_SEQ attaching→lifting→swinging→aligned ---
+  if(J.state==='picking'){
+    J.t+=dt;
+    const seg=JH_SEQ[J.step];
+    const p=Math.min(1, J.t/seg.dur);
+    const e=easeIO(p);
+    let c, rotZ;
+    if(seg.name==='attaching'){ c={...JH.rest}; rotZ=Math.PI/2; }
+    else if(seg.name==='lifting'){
+      c={ x:lerp(JH.rest.x,JH.lift.x,e), y:lerp(JH.rest.y,JH.lift.y,e), z:lerp(JH.rest.z,JH.lift.z,e) };
+      rotZ=lerp(Math.PI/2,0,e);
+    } else if(seg.name==='swinging'){
+      c={ x:lerp(JH.lift.x,JH.align.x,e), y:lerp(JH.lift.y,JH.align.y,e), z:lerp(JH.lift.z,JH.align.z,e) };
+      rotZ=0;
+    } else { c={...JH.align}; rotZ=0; }
+    setJhStatus('JOINT HANDLING · '+seg.label);
+    JH.joint.position.set(c.x,c.y,c.z); JH.joint.rotation.z=rotZ;
+    const latched=seg.name!=='aligned';
+    JH.elev.visible=latched; JH.line.visible=latched;
+    const end=jointEnd(c,rotZ);
+    if(seg.name==='attaching'){
+      JH.elev.position.set(lerp(JH.park.x,end.x,e), lerp(JH.park.y,end.y,e), lerp(JH.park.z,end.z,e));
+    } else { JH.elev.position.set(end.x,end.y,end.z); }
+    JH.elev.rotation.z=rotZ;
+    const pts=JH.lineGeo.attributes.position.array;
+    pts[0]=JH.drumPos.x; pts[1]=JH.drumPos.y; pts[2]=JH.drumPos.z;
+    pts[3]=JH.sheavePos.x; pts[4]=JH.sheavePos.y; pts[5]=JH.sheavePos.z;
+    pts[6]=JH.elev.position.x; pts[7]=JH.elev.position.y+0.3; pts[8]=JH.elev.position.z;
+    JH.lineGeo.attributes.position.needsUpdate=true;
+    if(p>=1){
+      J.t=0; J.step++;
+      if(J.step>=JH_SEQ.length){
+        J.state='stabbed';
+        setJhStatus('JOINT STABBED · ENGAGE TONGS [X] TO CONNECT');
+        AudioFX.beep(660,0.16,0.3);
+      } else { J.state='picking'; AudioFX.clack(); }
     }
+    return;
+  }
+
+  // --- STABBED: joint at well center, waiting for tongs ---
+  if(J.state==='stabbed'){
+    JH.joint.position.set(JH.align.x,JH.align.y,JH.align.z);
+    JH.joint.rotation.z=0; JH.elev.visible=false; JH.line.visible=false;
+    setJhStatus('JOINT STABBED · ENGAGE TONGS [X] TO CONNECT');
+    return;
+  }
+
+  // --- CONNECTING: tongs making up ---
+  if(J.state==='connecting'){
+    J.t+=dt;
+    const p=Math.min(1,J.t/1.2);
+    // small torque pulse: joint wiggles slightly
+    JH.joint.rotation.y=Math.sin(p*Math.PI*6)*0.06*(1-p);
+    setJhStatus('TONGS · MAKING CONNECTION');
+    if(p>=1){
+      JH.joint.rotation.y=0;
+      st.connectedJoints++;
+      st.connectedFt = st.jointCum[st.connectedJoints-1] || st.connectedFt+JOINT_AVG;
+      st.score+=st.scoring.joint;
+      J.staged++;
+      toast('CONNECTION MADE · '+st.connectedJoints+' JOINT'+(st.connectedJoints!==1?'S':'')+' CONNECTED',true);
+      AudioFX.beep(880,0.18,0.35);
+      JH.joint.visible=false; J.state='idle';
+    }
+    return;
+  }
+
+  // --- AT_BASKET: connection at basket during trip-out ---
+  if(J.state==='at_basket'){
+    setJhStatus('CONNECTION AT BASKET · ENGAGE TONGS [X] TO BREAK');
+    return;
+  }
+
+  // --- BREAKING: tongs breaking connection ---
+  if(J.state==='breaking'){
+    J.t+=dt;
+    const p=Math.min(1,J.t/1.2);
+    setJhStatus('TONGS · BREAKING CONNECTION');
+    if(p>=1){
+      // remove the joint from the string
+      st.connectedJoints--;
+      st.connectedFt = st.connectedJoints>0
+        ? (st.jointCum[st.connectedJoints-1] || st.connectedFt-JOINT_AVG) : 0;
+      st.rackCount++;
+      // show the returned joint at align position for lay-down
+      JH.joint.visible=true;
+      JH.joint.position.set(JH.align.x,JH.align.y,JH.align.z);
+      JH.joint.rotation.z=0;
+      updateBreakDepth();
+      toast('CONNECTION BROKEN · JOINT REMOVED · '+st.connectedJoints+' REMAINING',true);
+      AudioFX.clack();
+      J.state='laying_down'; J.t=0;
+    }
+    return;
+  }
+
+  // --- LAYING_DOWN: joint returns from align to rest ---
+  if(J.state==='laying_down'){
+    J.t+=dt;
+    const p=Math.min(1,J.t/2.4);
+    const e=easeIO(p);
+    // reverse swing then lower
+    let c, rotZ;
+    if(p<0.45){
+      const ep=easeIO(Math.min(1,p/0.45));
+      c={ x:lerp(JH.align.x,JH.lift.x,ep), y:lerp(JH.align.y,JH.lift.y,ep), z:lerp(JH.align.z,JH.lift.z,ep) };
+      rotZ=0;
+    } else {
+      const ep=easeIO(Math.min(1,(p-0.45)/0.55));
+      c={ x:lerp(JH.lift.x,JH.rest.x,ep), y:lerp(JH.lift.y,JH.rest.y,ep), z:lerp(JH.lift.z,JH.rest.z,ep) };
+      rotZ=lerp(0,Math.PI/2,ep);
+    }
+    setJhStatus('LAYING DOWN JOINT');
+    JH.joint.position.set(c.x,c.y,c.z); JH.joint.rotation.z=rotZ;
+    JH.joint.rotation.y=0;
+    if(p>=1){
+      JH.joint.visible=false;
+      syncRackVisuals();  // show returned joint on rack
+      J.state='idle';
+      AudioFX.beep(440,0.12,0.25);
+      toast('JOINT ON RACK · '+st.rackCount+' AVAILABLE',true);
+    }
+    return;
   }
 }
 
@@ -1182,7 +1300,7 @@ function createCameraControls(){
 
 /* ============ 6. HUD — 2D canvases & readouts ============ */
 const $=id=>document.getElementById(id);
-const ui={lvl:$('hudLvl'),score:$('hudScore'),depth:$('hudDepth'),joints:$('hudJoints'),
+const ui={lvl:$('hudLvl'),score:$('hudScore'),depth:$('hudDepth'),
   toast:$('toast'),seal:$('sealFill'),fUp:$('fUp'),fDn:$('fDn'),badge:$('lhBadge'),
   run:$('btnRun'),up:$('btnJackUp'),dn:$('btnJackDn'),
   travH:$('btnTravH'),travL:$('btnTravL'),statH:$('btnStatH'),statL:$('btnStatL'),
@@ -1352,9 +1470,25 @@ $('sndBtn').textContent = AudioFX.enabled ? '🔊' : '🔇';
 
 $('btnAddJoint').onclick=()=>{ AudioFX.init(); startAddJoint(); };
 function toggleTongs(){
-  AudioFX.init(); st.tongs=!st.tongs; AudioFX.clack();
-  $('btnTongs').classList.toggle('engaged',st.tongs);
-  toast(st.tongs?'TONGS ENGAGED — MAKE UP CONNECTION':'TONGS DISENGAGED',true);
+  AudioFX.init();
+  if(!st.playing){ return; }
+  if(st.jh.state==='stabbed'){
+    // make connection
+    st.jh.state='connecting'; st.jh.t=0;
+    $('btnTongs').classList.add('engaged');
+    toast('MAKING CONNECTION...', true); AudioFX.clack();
+  } else if(st.jh.state==='at_basket'){
+    // check slips are safe before breaking
+    if(!statHolds()){
+      toast('SET STATIONARY SLIPS BEFORE BREAKING CONNECTION'); AudioFX.beep(150,0.15,0.3);
+      st.score=Math.max(0,st.score-20); return;
+    }
+    st.jh.state='breaking'; st.jh.t=0;
+    $('btnTongs').classList.add('engaged');
+    toast('BREAKING CONNECTION...', true); AudioFX.clack();
+  } else if(st.jh.state==='idle' || st.jh.state==='picking'){
+    toast(st.jh.state==='picking'?'JOINT NOT YET STABBED':'NO JOINT TO CONNECT'); AudioFX.beep(150,0.1,0.2);
+  }
 }
 $('btnTongs').onclick=toggleTongs;
 createCameraControls();
@@ -1406,6 +1540,11 @@ function startLevel(lvl){
     mapDepth:Math.max(cfg.target,cfg.startDepth),
     depth:cfg.startDepth, prevDepth:cfg.startDepth, jack:0,
     travH:false, travL:false, statH:true, statL:true, tongs:false,
+    rackCount: cfg.objective==='trip-out' ? 0 : RACK_INIT,
+    connectedJoints: 0,
+    connectedFt: 0,
+    breakDepth: -1,
+    addWarnT: 0, breakWarnT: 0,
     travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
     autoRun:false, phase:'idle',
     P:cfg.p0, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
@@ -1415,7 +1554,20 @@ function startLevel(lvl){
   });
   Object.assign(st, makeJointTable(st.mapDepth));
   st.wasLight=pipeLight();
-  st.jh.state='idle'; st.jh.t=0; st.jh.step=0;
+  // set up joint inventory
+  if(cfg.objective==='trip-out'){
+    st.connectedJoints = jointsFromFt(cfg.startDepth) || 1;
+    st.connectedFt = st.jointCum[st.connectedJoints-1] || cfg.startDepth;
+    st.rackCount = 0;
+    updateBreakDepth();
+  } else {
+    st.connectedJoints = 0; st.connectedFt = 0;
+    st.rackCount = RACK_INIT;
+    st.breakDepth = -1;
+  }
+  syncRackVisuals();
+  if(JH){ JH.joint.visible=false; JH.elev.visible=false; JH.line.visible=false; }
+  st.jh.state='idle'; st.jh.t=0; st.jh.step=0; st.jh.staged=0;
   $('btnTongs').classList.remove('engaged');
   setDir(st.stage==='out' ? -1 : 1); setMode(st.mode); refreshSlipBtns();
   $('ovlPause').classList.add('hidden'); $('pauseBtn').textContent='⏸';
@@ -1429,7 +1581,7 @@ function startLevel(lvl){
 // mixed objective: target depth reached, flip to pulling out
 function beginOutStage(){
   st.stage='out'; st.stageStartDepth=st.depth; st.lastJoints=0; st.jointsDone=0;
-  setDir(-1); st.phase='idle';
+  setDir(-1); updateBreakDepth(); st.phase='idle';
   AudioFX.chime(); st.score+=250;
   toast('TARGET DEPTH REACHED +250 — NOW TRIP OUT TO SURFACE',true);
 }
@@ -1569,6 +1721,14 @@ $('btnNext').onclick=()=>{AudioFX.init(); $('ovlWin').classList.add('hidden'); s
 /* ============ 9. AUTO SEQUENCER — slip/jack state machine ============ */
 function autoStep(dt){
   if(!st.autoRun){ return 0; }
+  // pause auto cycle if string is at connected limit
+  if(st.stage==='in' && st.connectedFt-st.depth<0.1){
+    if(st.autoRun){ st.autoRun=false; st.phase='idle';
+      ui.run.textContent='▶ RUN AUTO CYCLE'; ui.run.classList.remove('run-on');
+      [ui.up,ui.dn,...slipBtns].forEach(b=>b.disabled=false);
+      toast('AUTO PAUSED — ADD JOINT [Z] TO CONTINUE'); }
+    return 0;
+  }
   const inDir = st.dir===1;
   // jack target positions: gripped stroke moves head DOWN for snub-in
   const strokeEnd = inDir ? 0 : STROKE;     // gripped travel destination
@@ -1663,6 +1823,7 @@ function update(dt){
   if(st.mode==='auto') jv += autoStep(dt);
 
   // constraints
+  if(!st.held.up && !st.held.dn && !st.autoRun){ st.addWarnT=0; st.breakWarnT=0; }
   const tg=travHolds(), sg=statHolds();
   if(tg && sg && jv!==0){
     jv=0; st.lockWarnT+=dt;
@@ -1674,11 +1835,32 @@ function update(dt){
   let dj=st.jack-j0;
   let dDepth=0;
   if(tg && !sg && dj!==0){
-    dDepth = -dj;                        // head down (jack-) pushes pipe in (+depth)
+    dDepth = -dj;
+    // SNUB-IN gate: can't go deeper than connected string
+    if(st.stage==='in' && dDepth>0){
+      const avail=st.connectedFt-st.depth;
+      if(avail<=0.05){
+        dDepth=0; st.addWarnT+=dt;
+        if(st.addWarnT>0.5){ st.addWarnT=0; toast('END OF STRING — ADD JOINT [Z] TO CONTINUE'); AudioFX.beep(220,0.1,0.2); }
+      } else { dDepth=Math.min(dDepth,avail); }
+    }
+    // TRIP-OUT gate: connection at basket blocks upward movement
+    if(st.stage==='out' && dDepth<0 && st.jh.state==='at_basket'){
+      dDepth=0; st.breakWarnT+=dt;
+      if(st.breakWarnT>0.5){ st.breakWarnT=0; toast('CONNECTION AT BASKET — ENGAGE TONGS [X] TO BREAK'); AudioFX.beep(220,0.1,0.2); }
+    }
     const nd=Math.max(0,st.depth+dDepth);
     dDepth=nd-st.depth; st.depth=nd;
   }
   st.pipeV = dDepth/Math.max(dt,1e-4);
+  // trip-out: detect when next connection rises to basket height
+  if(st.stage==='out' && st.jh.state==='idle' && st.connectedJoints>=2){
+    if(st.depth<=st.breakDepth && st.depth>0){
+      st.jh.state='at_basket';
+      toast('CONNECTION AT BASKET — SET SLIPS, THEN TONGS [X] TO BREAK',true);
+      AudioFX.beep(660,0.2,0.3);
+    }
+  }
   const moving=Math.abs(st.pipeV)>0.2;
   AudioFX.setHyd(Math.min(1,Math.abs(jv)/JACK_SPD_MAN));
 
@@ -1805,8 +1987,6 @@ function update(dt){
 function refreshHUD(dt){
   ui.score.textContent=st.score;
   ui.depth.textContent=Math.round(st.depth);
-  const si=stageInfo();
-  ui.joints.textContent=si.joints+'/'+si.jointsTotal;
   $('hudObj').textContent = st.stage==='in' ? 'SNUB IN → '+st.target+' ft' : 'TRIP OUT → SURFACE';
   $('annSlider').value=Math.round(st.annular);
   const ai=$('annInfo'), req=Math.round(st.annReq);
@@ -1822,18 +2002,53 @@ function refreshHUD(dt){
   ui.badge.textContent=light?'▲ PIPE LIGHT — SNUBBING':'▼ PIPE HEAVY — CONVENTIONAL';
   ui.badge.classList.toggle('heavy',!light);
   if(toastT>0){ toastT-=dt; if(toastT<=0) ui.toast.className=''; }
+
+  // topbar rack/connected counts
+  const rackEl=$('hudRack'); if(rackEl) rackEl.textContent=st.rackCount;
+  const connEl=$('hudConn'); if(connEl) connEl.textContent=st.connectedJoints;
+
+  // workflow hint
+  const wh=$('workflowHint');
+  if(wh && st.playing){
+    let hint='';
+    const js=st.jh.state;
+    if(st.stage==='in'){
+      if(st.connectedJoints===0) hint='NEXT: ADD JOINT [Z] TO START';
+      else if(js==='picking') hint='JOINT BEING PICKED UP...';
+      else if(js==='stabbed') hint='NEXT: ENGAGE TONGS [X] TO CONNECT';
+      else if(js==='connecting') hint='MAKING CONNECTION...';
+      else if(st.connectedFt-st.depth<1) hint='NEXT: ADD JOINT [Z] TO CONTINUE';
+      else hint='RUN IN HOLE — JACK [W/S]';
+    } else {
+      if(js==='at_basket') hint='NEXT: ENGAGE TONGS [X] TO BREAK CONNECTION';
+      else if(js==='breaking') hint='BREAKING CONNECTION...';
+      else if(js==='laying_down') hint='LAYING DOWN JOINT...';
+      else if(st.connectedJoints<=1) hint='PULL TO SURFACE — JACK [W/S]';
+      else hint='TRIP OUT — JACK [W/S]';
+    }
+    wh.textContent=hint; wh.style.display=hint?'':'none';
+  }
+
   // rig status panel
   function sv(id, val, trueClass, falseClass){
-    const el=$( id); el.textContent=val?trueClass.toUpperCase():falseClass.toUpperCase();
+    const el=$(id); if(!el) return;
+    el.textContent=val?trueClass.toUpperCase():falseClass.toUpperCase();
     el.className='sval '+(val?trueClass:falseClass);
   }
+  const stateLabels={idle:'NONE',picking:'HOISTING',stabbed:'STABBED',connecting:'CONNECTING',
+    at_basket:'AT BASKET',breaking:'BREAKING',laying_down:'LAYING DOWN'};
+  const jsEl=$('stJointState');
+  if(jsEl){ jsEl.textContent=stateLabels[st.jh.state]||st.jh.state.toUpperCase();
+    jsEl.className='sval '+(st.jh.state==='idle'?'open':'closed'); }
+  const rackSt=$('stRack'); if(rackSt) rackSt.textContent=st.rackCount;
+  const connSt=$('stConn'); if(connSt) connSt.textContent=st.connectedJoints;
   sv('stTravL',st.travL,'closed','open');
   sv('stTravH',st.travH,'closed','open');
   sv('stStatL',st.statL,'closed','open');
   sv('stStatH',st.statH,'closed','open');
-  sv('stTongs', st.tongs,'engaged','disengaged');
-  const craneLoaded = st.jh && st.jh.state!=='idle';
-  sv('stCrane', craneLoaded,'loaded','unloaded');
+  const tongsLabel={idle:'IDLE',stabbed:'READY',connecting:'ENGAGING',at_basket:'READY',breaking:'ENGAGING',laying_down:'IDLE'};
+  const tEl=$('stTongs'); if(tEl){ tEl.textContent=(tongsLabel[st.jh.state]||'IDLE').toUpperCase();
+    tEl.className='sval '+(st.jh.state==='connecting'||st.jh.state==='breaking'?'engaged':'disengaged'); }
   drawDiagram(); drawGauge();
 }
 
