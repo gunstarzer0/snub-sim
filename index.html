@@ -91,6 +91,20 @@
   .hidden{display:none !important;}
   #failReason{color:var(--bad);font-weight:700;font-size:16px;margin:8px 0;}
   #winStats{font-size:14px;margin:8px 0;color:var(--ok);font-weight:700;}
+  /* camera control panel */
+  #camPanel{left:12px;bottom:34px;padding:8px;z-index:5;width:128px;}
+  #camPanel h4{margin:0 0 4px;font-size:10px;letter-spacing:1.4px;color:var(--acc2);text-align:center;}
+  #camPanel .crow{display:flex;gap:4px;margin-top:4px;}
+  #camPanel button{flex:1;background:#1a2330;border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:5px 2px;cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.3px;}
+  #camPanel button:hover{border-color:var(--acc);}
+  #camPanel button:active{background:var(--acc);color:#14100a;}
+  /* joint-handling status */
+  #jhStatus{position:fixed;bottom:58px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;
+    letter-spacing:.6px;color:#ffd23d;background:rgba(20,16,5,.82);border:1px solid var(--line);border-radius:8px;
+    padding:5px 16px;z-index:5;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
+  #jhStatus.show{opacity:1;}
+  #btnAddJoint.active{background:var(--warn);border-color:var(--warn);color:#14100a;}
 </style>
 </head>
 <body>
@@ -163,11 +177,35 @@
       <button class="btn engaged" id="btnStatH">HEAVY <span class="kbd">[Q]</span></button>
       <button class="btn engaged" id="btnStatL">SNUB <span class="kbd">[A]</span></button>
     </div>
+    <div class="row">
+      <button class="btn" id="btnAddJoint">⬇ ADD JOINT <span class="kbd">[J]</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="camPanel" class="panel">
+  <h4>CAMERA VIEW</h4>
+  <div class="crow">
+    <button data-cam="overview">OVERVIEW</button>
+    <button data-cam="basket">BASKET</button>
+  </div>
+  <div class="crow">
+    <button data-cam="wellhead">WELLHEAD</button>
+    <button data-cam="catwalk">CATWALK</button>
+  </div>
+  <div class="crow">
+    <button data-cam="cutaway">CUTAWAY</button>
+    <button id="camReset">RESET</button>
+  </div>
+  <div class="crow">
+    <button id="camZoomIn">ZOOM +</button>
+    <button id="camZoomOut">ZOOM −</button>
   </div>
 </div>
 
 <div id="toast"></div>
-<div id="hintbar">Drag to orbit · Scroll zoom · W/S jack · Q/A stat slips · E/D trav slips · B/P pressure · Z/X annular · M sound</div>
+<div id="jhStatus"></div>
+<div id="hintbar">Drag orbit · Right-drag/Shift pan · Scroll zoom · W/S jack · Q/A·E/D slips · B/P pressure · Z/X annular · J add joint · M sound</div>
 
 <div class="ovl" id="ovlTitle">
   <div class="card">
@@ -530,6 +568,16 @@ const M = {
   collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
   rail:  new THREE.MeshStandardMaterial({color:0xd8b53a, roughness:.6, metalness:.3}),
   snub:  new THREE.MeshStandardMaterial({color:0x5fb4e8, roughness:.5, metalness:.4}),
+  // Jack in Black livery + lease environment
+  black: new THREE.MeshStandardMaterial({color:0x141519, roughness:.5, metalness:.55}),
+  yellow:new THREE.MeshStandardMaterial({color:0xf2c012, roughness:.5, metalness:.3}),
+  gravel:new THREE.MeshStandardMaterial({color:0x4b4843, roughness:1, metalness:0}),
+  matblk:new THREE.MeshStandardMaterial({color:0x22262c, roughness:.95, metalness:.05}),
+  hose:  new THREE.MeshStandardMaterial({color:0x1c2024, roughness:.85, metalness:.1}),
+  cone:  new THREE.MeshStandardMaterial({color:0xff6a1a, roughness:.7, metalness:.1, emissive:0x3a1500, emissiveIntensity:.6}),
+  tank:  new THREE.MeshStandardMaterial({color:0x9fae7a, roughness:.55, metalness:.35}),
+  bottle:new THREE.MeshStandardMaterial({color:0x2d6cc0, roughness:.4, metalness:.5}),
+  glass: new THREE.MeshStandardMaterial({color:0x2a3340, roughness:.2, metalness:.6}),
 };
 const box = (w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
 const cyl = (rt,rb,h,m,seg=24)=>new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);
@@ -603,6 +651,7 @@ tgtRing.position.z=1.28; scene.add(tgtRing);
 const tgtLbl = labelSprite('◀ TARGET','#5cf09a'); scene.add(tgtLbl);
 
 /* snubbing unit */
+const BASKET_Y = 13.0;            // world Y of the work-basket floor
 const rig = new THREE.Group(); scene.add(rig);
 let travHead, rods=[], beaconMat, rodGlowMats=[];
 const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
@@ -626,7 +675,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   add(cyl(1.25,1.25,0.22,M.steelDk),5.1);           // top flange
 
   // jack base plate + stationary slip station (heavy above, snub inverted below)
-  const base=add(box(3.6,0.28,3.6,M.orange),5.4);
+  const base=add(box(3.6,0.28,3.6,M.black),5.4);
   add(cyl(0.72,0.85,0.5,M.steelDk),5.75);
   for(const s of [-1,1]){
     const wh=box(0.5,0.38,0.5,M.rail); wh.position.set(s*0.32,5.98,0); shadowed(wh);
@@ -644,7 +693,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   }
   // traveling head + traveling slip station (heavy above, snub inverted below)
   travHead=new THREE.Group(); rig.add(travHead);
-  const plate=shadowed(box(3.2,0.3,3.2,M.orange)); travHead.add(plate);
+  const plate=shadowed(box(3.2,0.3,3.2,M.black)); travHead.add(plate);
   const bowl=shadowed(cyl(0.62,0.74,0.45,M.steelDk)); bowl.position.y=0.35; travHead.add(bowl);
   for(const s of [-1,1]){
     const wh=box(0.46,0.36,0.46,M.rail); wh.position.set(s*0.3,0.66,0); shadowed(wh);
@@ -653,7 +702,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     travHead.add(wl); travLW.push({m:wl,side:s});
   }
   // work basket (fixed) + legs + gin pole
-  const bY=13.0;
+  const bY=BASKET_Y;
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     const leg=cyl(0.09,0.09,bY-5.55,M.steelDk); leg.position.set(sx*2.05,(bY+5.55)/2,sz*2.05);
     rig.add(leg);
@@ -673,6 +722,352 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.16,12,8),beaconMat);
   beacon.position.set(2.3,bY+1.45,2.3); rig.add(beacon);
 }
+
+/* ============ 4b. BRANDING + LEASE ENVIRONMENT + JOINT HANDLING ============ */
+const flickerMats = [];            // {mat, base, amt} — animated emissives (flare, lights)
+let JH = null;                     // joint-handling refs, set by createJointHandlingSystem
+st.jh = { state:'idle', t:0, staged:0 };
+const JH_LEN = 8.2;                // active/inventory joint length, world units
+const easeIO = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+const lerp = (a,b,t)=>a+(b-a)*t;
+
+// --- canvas textures for the Jack in Black livery ---
+function brandDecalTex(text){
+  const c=document.createElement('canvas'); c.width=512; c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#141519'; g.fillRect(0,0,512,128);
+  g.fillStyle='#f2c012'; g.fillRect(0,0,512,9); g.fillRect(0,119,512,9);
+  g.font='bold 58px Arial, "Arial Black", sans-serif'; g.fillStyle='#f2c012';
+  g.textAlign='center'; g.textBaseline='middle'; g.fillText(text||'JACK IN BLACK',256,66);
+  const tx=new THREE.CanvasTexture(c); tx.colorSpace=THREE.SRGBColorSpace; tx.anisotropy=4; return tx;
+}
+const brandTex = brandDecalTex('JACK IN BLACK');
+function brandSign(w,h){
+  const m=new THREE.MeshStandardMaterial({map:brandTex, roughness:.55, metalness:.2});
+  return new THREE.Mesh(new THREE.PlaneGeometry(w,h), m);
+}
+function hazardTex(rep){
+  const c=document.createElement('canvas'); c.width=128; c.height=32; const g=c.getContext('2d');
+  g.fillStyle='#f2c012'; g.fillRect(0,0,128,32);
+  g.fillStyle='#141519';
+  for(let i=-48;i<160;i+=48){ g.beginPath(); g.moveTo(i,0); g.lineTo(i+24,0);
+    g.lineTo(i+24-24,32); g.lineTo(i-24,32); g.closePath(); g.fill(); }
+  const tx=new THREE.CanvasTexture(c); tx.wrapS=THREE.RepeatWrapping; tx.repeat.set(rep||4,1);
+  tx.colorSpace=THREE.SRGBColorSpace; return tx;
+}
+const hazMat = new THREE.MeshStandardMaterial({map:hazardTex(6), roughness:.6, metalness:.3});
+function gratingTex(){
+  const c=document.createElement('canvas'); c.width=64; c.height=64; const g=c.getContext('2d');
+  g.fillStyle='#2a313b'; g.fillRect(0,0,64,64);
+  g.strokeStyle='#3f4955'; g.lineWidth=3;
+  for(let i=0;i<=64;i+=16){ g.beginPath(); g.moveTo(i,0); g.lineTo(i,64); g.stroke();
+    g.beginPath(); g.moveTo(0,i); g.lineTo(64,i); g.stroke(); }
+  const tx=new THREE.CanvasTexture(c); tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(4,4);
+  tx.colorSpace=THREE.SRGBColorSpace; return tx;
+}
+const gratingMat = new THREE.MeshStandardMaterial({map:gratingTex(), roughness:.8, metalness:.4});
+function makeBrandedMaterial(opts){
+  return new THREE.MeshStandardMaterial(Object.assign({color:0x141519, roughness:.5, metalness:.55}, opts||{}));
+}
+
+// curved hose/tube helper
+function tube(points, r, mat){
+  const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(p[0],p[1],p[2])));
+  return new THREE.Mesh(new THREE.TubeGeometry(curve, 24, r, 8, false), mat);
+}
+
+// --- jack livery: hazard trim + brand decals on the branded frame ---
+function brandTheJack(){
+  // hazard band wrapping the jack base plate
+  for(const s of [-1,1]){
+    const bx=box(3.62,0.16,0.14,hazMat); bx.position.set(0,5.46,s*1.8); rig.add(bx);
+    const bz=box(0.14,0.16,3.62,hazMat); bz.position.set(s*1.8,5.46,0); rig.add(bz);
+  }
+  // brand sign on the front face of the jack base
+  const sign=brandSign(3.0,0.62); sign.position.set(0,5.4,1.81); rig.add(sign);
+  // yellow accent collars on the hydraulic barrels
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const ring=cyl(0.27,0.27,0.12,M.yellow); ring.position.set(sx*1.25,5.5+2.78,sz*1.25); rig.add(ring);
+  }
+  // yellow edge trim around the traveling plate
+  for(const s of [-1,1]){
+    const tx=box(3.24,0.08,0.1,M.yellow); tx.position.set(0,0.16,s*1.6); travHead.add(tx);
+    const tz=box(0.1,0.08,3.24,M.yellow); tz.position.set(s*1.6,0.16,0); travHead.add(tz);
+  }
+}
+
+// --- richer work-basket detailing ---
+function createBasketDetails(){
+  const bY=BASKET_Y;
+  // grating floor laid over the structural floor
+  const grate=box(4.6,0.04,4.6,gratingMat); grate.position.set(0,bY+0.11,0); shadowed(grate); rig.add(grate);
+  // yellow toe-boards / kickplates around the deck edge
+  for(const s of [-1,1]){
+    const kx=box(4.7,0.3,0.08,hazMat); kx.position.set(0,bY+0.27,s*2.3); rig.add(kx);
+    const kz=box(0.08,0.3,4.7,hazMat); kz.position.set(s*2.3,bY+0.27,0); rig.add(kz);
+  }
+  // mid-rails (between deck rail and posts)
+  for(const s of [-1,1]){
+    const r1=box(4.7,0.05,0.05,M.rail); r1.position.set(0,bY+0.62,s*2.3); rig.add(r1);
+    const r2=box(0.05,0.05,4.7,M.rail); r2.position.set(s*2.3,bY+0.62,0); rig.add(r2);
+  }
+  // brand sign on the basket rail facing out (+z front)
+  const sign=brandSign(3.2,0.5); sign.position.set(0,bY+1.15,2.34); rig.add(sign);
+  // control console with levers + small indicator lights (back-left corner)
+  const con=new THREE.Group(); con.position.set(-1.55,bY+0.1,-1.55); rig.add(con);
+  const cab=box(1.1,0.9,0.5,M.black); cab.position.y=0.55; shadowed(cab); con.add(cab);
+  const panel=box(1.0,0.5,0.06,M.steelDk); panel.position.set(0,0.7,0.27); panel.rotation.x=-0.5; con.add(panel);
+  for(let i=0;i<4;i++){
+    const lever=cyl(0.025,0.025,0.34,M.chrome); lever.position.set(-0.36+i*0.24,0.95,0.3);
+    lever.rotation.x=-0.4-(i%2)*0.3; con.add(lever);
+    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.05,8,6),
+      i%2? M.red : M.yellow); knob.position.set(-0.36+i*0.24,1.1,0.42); con.add(knob);
+  }
+  for(let i=0;i<3;i++){
+    const c=[0x3ddc7a,0xffd23d,0xff4d4d][i];
+    const lm=new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:1.3});
+    const lt=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,6),lm);
+    lt.position.set(-0.3+i*0.3,0.86,0.28); con.add(lt);
+  }
+  // hose bundle draped from the console down to the deck
+  rig.add(tube([[-1.9,bY+0.4,-1.4],[-2.1,bY+0.15,-0.6],[-1.8,bY+0.1,0.4],[-1.4,bY+0.12,1.2]],0.06,M.hose));
+  rig.add(tube([[-1.7,bY+0.45,-1.5],[-2.0,bY+0.2,-0.7],[-1.6,bY+0.12,0.3],[-1.2,bY+0.12,1.0]],0.05,M.hose));
+  // red toolbox in a corner
+  const tbox=box(0.9,0.45,0.5,M.red); tbox.position.set(1.5,bY+0.34,-1.6); shadowed(tbox); rig.add(tbox);
+  const tlid=box(0.92,0.08,0.52,M.steelDk); tlid.position.set(1.5,bY+0.6,-1.6); rig.add(tlid);
+  // small deck work lights on the corner posts
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const lm=new THREE.MeshStandardMaterial({color:0xfff2c8, emissive:0xffe6a0, emissiveIntensity:1.6});
+    const fix=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.1,0.08),lm);
+    fix.position.set(sx*2.28,bY+1.7,sz*2.28); rig.add(fix);
+    flickerMats.push({mat:lm, base:1.4, amt:0.25});
+  }
+}
+
+// --- gravel lease pad + wellsite equipment (kept behind the cut plane) ---
+function createLeasePad(){
+  // gravel pad sits behind the cutaway face (front edge ~z=-2) so it never occludes the underground view
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(84,0.2,56), M.gravel);
+  pad.position.set(0,0.02,-30); pad.receiveShadow=true; scene.add(pad);
+  // rig mats around the base of the unit
+  for(const p of [[-4.2,-3.5],[4.2,-3.5],[-4.2,-7.5],[4.2,-7.5],[0,-9]]){
+    const mat=box(4.4,0.12,3.2,M.matblk); mat.position.set(p[0],0.16,p[1]); mat.receiveShadow=true; scene.add(mat);
+  }
+  // accumulator (BOP control) skid — frame + blue nitrogen bottles, left side
+  const acc=new THREE.Group(); acc.position.set(-12,0,-6); scene.add(acc);
+  const askid=box(4.0,0.3,2.2,M.black); askid.position.y=0.25; shadowed(askid); acc.add(askid);
+  for(let i=0;i<5;i++){ const b=cyl(0.26,0.26,1.6,M.bottle); b.position.set(-1.5+i*0.75,1.25,-0.4);
+    shadowed(b); acc.add(b); }
+  const apump=box(1.4,0.9,1.6,M.yellow); apump.position.set(1.0,0.85,0.3); shadowed(apump); acc.add(apump);
+  const asign=brandSign(2.2,0.4); asign.position.set(0,1.6,1.11); acc.add(asign);
+  // pump / pressure-control skid — engine box + pump, right-back
+  const pmp=new THREE.Group(); pmp.position.set(-13,0,-13); scene.add(pmp);
+  const pskid=box(5.0,0.3,2.4,M.steelDk); pskid.position.y=0.25; shadowed(pskid); pmp.add(pskid);
+  const eng=box(2.6,1.5,2.0,M.black); eng.position.set(-1.0,1.15,0); shadowed(eng); pmp.add(eng);
+  const fluidend=cyl(0.55,0.55,2.2,M.steel); fluidend.rotation.z=Math.PI/2; fluidend.position.set(1.4,0.95,0);
+  shadowed(fluidend); pmp.add(fluidend);
+  const stack=cyl(0.12,0.14,1.3,M.steelDk); stack.position.set(-1.6,2.4,-0.6); pmp.add(stack);
+  // flare stack / vent line — far corner with a flickering flame
+  const flare=new THREE.Group(); flare.position.set(24,0,-24); scene.add(flare);
+  const fbase=box(2.0,0.3,2.0,M.matblk); fbase.position.y=0.15; flare.add(fbase);
+  const fstk=cyl(0.22,0.3,12,M.steelDk); fstk.position.y=6; shadowed(fstk); flare.add(fstk);
+  for(let i=1;i<=3;i++){ const guy=cyl(0.02,0.02,9,M.steelDk);
+    const ang=i*Math.PI*2/3; guy.position.set(Math.sin(ang)*2.2,4.2,Math.cos(ang)*2.2);
+    guy.rotation.z=Math.sin(ang)*0.45; guy.rotation.x=-Math.cos(ang)*0.45; flare.add(guy); }
+  const flameMat=new THREE.MeshStandardMaterial({color:0xff7a18, emissive:0xff7a18, emissiveIntensity:2.2, transparent:true, opacity:.9});
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(0.6,2.6,12),flameMat); flame.position.y=13.4; flare.add(flame);
+  flickerMats.push({mat:flameMat, base:2.0, amt:1.1});
+  const flareGlow=new THREE.PointLight(0xff7a18, 30, 30); flareGlow.position.set(24,13.6,-24); scene.add(flareGlow);
+  flickerMats.push({mat:flareGlow, base:24, amt:10, light:true});
+  // hose runs snaking from the pump/accumulator toward the wellhead
+  scene.add(tube([[-11.5,0.3,-5],[-7,0.25,-3.5],[-3,0.2,-2.5],[-1,0.3,-1.2]],0.1,M.hose));
+  scene.add(tube([[-12,0.3,-12],[-8,0.25,-8],[-4,0.2,-4],[-1.2,0.3,-1.5]],0.1,M.hose));
+  // barricades / safety cones ringing the wellhead (kept behind the cut plane)
+  const conePts=[[2.6,-2.6],[-2.6,-2.6],[3.2,-0.8],[-3.2,-0.8],[2.0,-4.4],[-2.0,-4.4],[0,-5.2]];
+  for(const p of conePts){
+    const cn=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.6,10),M.cone); cn.position.set(p[0],0.32,p[1]);
+    scene.add(cn);
+    const cb=box(0.42,0.06,0.42,M.matblk); cb.position.set(p[0],0.05,p[1]); scene.add(cb);
+  }
+  // work-light tower poles around the pad
+  for(const p of [[-9,4],[9,4],[-9,-16],[16,-10]]){
+    const pole=cyl(0.1,0.12,7,M.steelDk); pole.position.set(p[0],3.5,p[1]); shadowed(pole); scene.add(pole);
+    for(let i=-1;i<=1;i++){
+      const lm=new THREE.MeshStandardMaterial({color:0xfff4d0, emissive:0xffe9a8, emissiveIntensity:1.8});
+      const lamp=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.34,0.18),lm);
+      lamp.position.set(p[0]+i*0.55,7.1,p[1]+0.2); lamp.lookAt(0,2,0); scene.add(lamp);
+      flickerMats.push({mat:lm, base:1.7, amt:0.15});
+    }
+  }
+  // equipment trailer (crew/tool) parked on the pad
+  const tr=new THREE.Group(); tr.position.set(-19,0,-3); tr.rotation.y=0.4; scene.add(tr);
+  const body=box(7,2.2,2.6,M.yellow); body.position.y=1.7; shadowed(body); tr.add(body);
+  const stripe=box(7.02,0.5,2.62,M.black); stripe.position.y=1.2; tr.add(stripe);
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const wh=cyl(0.45,0.45,0.3,M.matblk); wh.rotation.x=Math.PI/2; wh.position.set(sx*2.6,0.45,sz*1.0); tr.add(wh);
+  }
+  const hitch=box(1.6,0.2,0.2,M.steelDk); hitch.position.set(4.0,0.6,0); tr.add(hitch);
+  const tsign=brandSign(4.0,0.8); tsign.position.set(0,1.8,1.32); tr.add(tsign);
+}
+
+// --- catwalk + pipe rack with stacked joint inventory (+x side) ---
+function createCatwalkAndPipeRack(){
+  const grp=new THREE.Group(); grp.position.set(0,0,-5); scene.add(grp);
+  // catwalk: a long walkway with a V-trough running from the rack toward the V-door
+  const walk=box(9,0.25,2.2,M.steelDk); walk.position.set(8.5,0.7,2.4); shadowed(walk); grp.add(walk);
+  for(const s of [-1,1]){
+    const v=box(9,0.5,0.5,M.black); v.position.set(8.5,1.0,2.4+s*0.75); v.rotation.x=s*0.5; grp.add(v);
+  }
+  // ramp from catwalk down toward the rig floor (V-door)
+  const ramp=box(5,0.2,2.0,M.matblk); ramp.position.set(3.4,0.5,2.4); ramp.rotation.z=0.12; grp.add(ramp);
+  // pipe rack: cross-stands holding joints, further out
+  for(const x of [10,15.5]){
+    const stand=box(0.4,1.4,5.0,M.black); stand.position.set(x,0.7,-1.0); shadowed(stand); grp.add(stand);
+    const haz=box(0.42,0.3,5.02,hazMat); haz.position.set(x,1.45,-1.0); grp.add(haz);
+  }
+  // stacked joint inventory on the rack (lying along X; group is offset z=-5)
+  JH = JH || {};
+  JH.rackJoints=[];
+  const rows=[[-2.4,1.7],[-1.7,1.7],[-1.0,1.7],[-2.05,2.35],[-1.35,2.35]];
+  for(const [z,y] of rows){
+    const j=cyl(0.17,0.17,JH_LEN,M.pipe); j.rotation.z=Math.PI/2; j.position.set(12.5,y,z);
+    shadowed(j); grp.add(j);
+    // a tool-joint collar near the well end
+    const col=cyl(0.24,0.24,0.5,M.collar); col.rotation.z=Math.PI/2; col.position.set(9.2,y,z);
+    grp.add(col);
+    JH.rackJoints.push(j);
+  }
+}
+
+// --- crane boom + sheave + winch + elevators + animated joint ---
+function createJointHandlingSystem(){
+  JH = JH || {};
+  const apex={x:0,y:BASKET_Y+3.4,z:0};
+  const tip ={x:6.0,y:BASKET_Y+2.2,z:-3.0};          // boom tip out over the catwalk
+  // boom from gin-pole apex out to the tip
+  const boomLen=Math.hypot(tip.x-apex.x,tip.y-apex.y,tip.z-apex.z);
+  const boom=cyl(0.1,0.12,boomLen,M.yellow);
+  boom.position.set((apex.x+tip.x)/2,(apex.y+tip.y)/2,(apex.z+tip.z)/2);
+  boom.lookAt(tip.x,tip.y,tip.z); boom.rotateX(Math.PI/2); shadowed(boom); rig.add(boom);
+  // brace back to the basket
+  const brace=cyl(0.06,0.06,4.2,M.steelDk);
+  brace.position.set(tip.x*0.5,BASKET_Y+1.6,tip.z*0.5); brace.lookAt(tip.x,tip.y,tip.z);
+  brace.rotateX(Math.PI/2); rig.add(brace);
+  // sheave block hanging just under the tip
+  const sheave=new THREE.Group(); sheave.position.set(tip.x,tip.y-0.5,tip.z); rig.add(sheave);
+  const wheel=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.07,8,18),M.steel);
+  wheel.rotation.y=Math.PI/2; sheave.add(wheel);
+  for(const s of [-1,1]){ const pl=box(0.05,0.7,0.4,M.steelDk); pl.position.set(s*0.16,0.1,0); sheave.add(pl); }
+  // winch drum at the basket rail
+  const drumPos={x:1.4,y:BASKET_Y+0.6,z:-1.4};
+  const drum=cyl(0.22,0.22,0.6,M.black); drum.rotation.x=Math.PI/2; drum.position.set(drumPos.x,drumPos.y,drumPos.z);
+  rig.add(drum);
+  // pickup elevators (clamp around the joint) + bail
+  const elev=new THREE.Group(); rig.add(elev);
+  for(const s of [-1,1]){ const half=box(0.18,0.34,0.5,M.yellow); half.position.set(s*0.26,0,0); elev.add(half); }
+  const bail=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.04,8,16),M.chrome);
+  bail.position.y=0.3; elev.add(bail);
+  elev.visible=false;
+  // the active (moving) joint
+  const joint=new THREE.Group(); rig.add(joint);
+  const jbody=cyl(0.17,0.17,JH_LEN,M.pipe); shadowed(jbody); joint.add(jbody);
+  const jcol=cyl(0.24,0.24,0.5,M.collar); jcol.position.y=JH_LEN/2-0.5; joint.add(jcol);
+  const jbox=cyl(0.21,0.21,0.4,M.collar); jbox.position.y=-JH_LEN/2+0.4; joint.add(jbox);
+  joint.visible=false;
+  // dynamic winch line
+  const lineMat=new THREE.LineBasicMaterial({color:0x12161c});
+  const lineGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()]);
+  const line=new THREE.Line(lineGeo,lineMat); line.visible=false; rig.add(line);
+
+  Object.assign(JH,{ apex, tip, sheavePos:{x:tip.x,y:tip.y-0.5,z:tip.z}, drumPos,
+    elev, joint, jbody, line, lineGeo,
+    park:{x:drumPos.x,y:drumPos.y-0.3,z:drumPos.z},
+    rest:{x:12.5,y:1.9,z:-6.4},      // top rack joint, world space (rack group offset z=-5)
+    lift:{x:10.5,y:7.8,z:-4.5},
+    align:{x:0,y:11.4,z:0} });
+}
+
+// the +Y-local end of the joint (where elevators latch) for a given centre + roll
+function jointEnd(c, rotZ){
+  return { x:c.x - (JH_LEN/2)*Math.sin(rotZ), y:c.y + (JH_LEN/2)*Math.cos(rotZ), z:c.z };
+}
+function setJhStatus(msg){
+  const el=document.getElementById('jhStatus');
+  if(!msg){ el.classList.remove('show'); return; }
+  el.textContent=msg; el.classList.add('show');
+}
+const JH_SEQ=[
+  {name:'attaching', dur:1.1, label:'ELEVATORS LATCHING'},
+  {name:'lifting',   dur:2.2, label:'HOISTING JOINT'},
+  {name:'swinging',  dur:2.0, label:'SWINGING TO WELL CENTER'},
+  {name:'aligned',   dur:1.2, label:'ALIGNED — STABBING'},
+];
+function startAddJoint(){
+  if(!JH || st.jh.state!=='idle') return;
+  st.jh.state='attaching'; st.jh.t=0; st.jh.step=0;
+  JH.joint.visible=true; JH.elev.visible=true; JH.line.visible=true;
+  AudioFX.clack();
+  document.getElementById('btnAddJoint').classList.add('active');
+}
+function updateJointHandling(dt){
+  if(!JH) return;
+  const J=st.jh;
+  // resolve current centre + roll of the joint
+  let c, rotZ;
+  if(J.state==='idle'){
+    setJhStatus(null);
+    JH.joint.visible=false; JH.elev.visible=false; JH.line.visible=false;
+    document.getElementById('btnAddJoint').classList.remove('active');
+    return;
+  }
+  J.t+=dt;
+  const seg=JH_SEQ[J.step];
+  const p=Math.min(1, J.t/seg.dur);
+  const e=easeIO(p);
+  if(seg.name==='attaching'){ c={...JH.rest}; rotZ=Math.PI/2; }
+  else if(seg.name==='lifting'){
+    c={ x:lerp(JH.rest.x,JH.lift.x,e), y:lerp(JH.rest.y,JH.lift.y,e), z:lerp(JH.rest.z,JH.lift.z,e) };
+    rotZ=lerp(Math.PI/2,0,e);
+  } else if(seg.name==='swinging'){
+    c={ x:lerp(JH.lift.x,JH.align.x,e), y:lerp(JH.lift.y,JH.align.y,e), z:lerp(JH.lift.z,JH.align.z,e) };
+    rotZ=0;
+  } else { c={...JH.align}; rotZ=0; }
+  setJhStatus('JOINT HANDLING · '+seg.label);
+  JH.joint.position.set(c.x,c.y,c.z); JH.joint.rotation.z=rotZ;
+  // elevators ride the upper end of the joint (latch on during 'attaching')
+  const end=jointEnd(c,rotZ);
+  if(seg.name==='attaching'){
+    JH.elev.position.set(lerp(JH.park.x,end.x,e), lerp(JH.park.y,end.y,e), lerp(JH.park.z,end.z,e));
+  } else {
+    JH.elev.position.set(end.x,end.y,end.z);
+  }
+  JH.elev.rotation.z=rotZ;
+  // winch line: drum -> sheave -> elevator
+  const pts=JH.lineGeo.attributes.position.array;
+  pts[0]=JH.drumPos.x; pts[1]=JH.drumPos.y; pts[2]=JH.drumPos.z;
+  pts[3]=JH.sheavePos.x; pts[4]=JH.sheavePos.y; pts[5]=JH.sheavePos.z;
+  pts[6]=JH.elev.position.x; pts[7]=JH.elev.position.y+0.3; pts[8]=JH.elev.position.z;
+  JH.lineGeo.attributes.position.needsUpdate=true;
+  // advance the state machine
+  if(p>=1){
+    J.t=0; J.step++;
+    if(J.step>=JH_SEQ.length){
+      J.state='idle'; J.staged++;
+      toast('JOINT STACKED & READY — '+J.staged+' staged this shift', true);
+      AudioFX.beep(660,0.16,0.3);
+    } else {
+      J.state=JH_SEQ[J.step].name;
+      AudioFX.clack();
+    }
+  }
+}
+
+// build everything
+brandTheJack();
+createBasketDetails();
+createLeasePad();
+createCatwalkAndPipeRack();
+createJointHandlingSystem();
 
 /* ============ 5. PARTICLES — gas, sparks, motion streaks ============ */
 const dotTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=64;
@@ -707,17 +1102,54 @@ const gasFx = makeParticles(220, 0xcfd8df, 0.34); gasFx.grav=1.2;
 const sparkFx = makeParticles(160, 0xffa030, 0.22); sparkFx.grav=-9;
 const streakFx = makeParticles(120, 0x9fd8ff, 0.16); streakFx.grav=0;
 
-/* camera orbit */
-const cam={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6};
-{
-  let drag=false, px=0, py=0;
+/* camera — smooth orbit / zoom / pan / presets */
+// `cam` is the live (rendered) camera; `camGoal` is the target it eases toward.
+const cam    ={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6, tz:0};
+const camGoal={yaw:0.45, pitch:0.13, dist:34, tx:0, ty:1.6, tz:0};
+let camUser=false;                 // user has taken control -> stop the idle auto-spin
+const clampCam=()=>{ camGoal.pitch=Math.max(-0.15,Math.min(1.2,camGoal.pitch));
+  camGoal.dist=Math.max(8,Math.min(60,camGoal.dist)); };
+const CAM_PRESETS={
+  overview:{yaw:0.45, pitch:0.24, dist:40, tx:0, ty:3.5, tz:0},
+  basket:  {yaw:0.7,  pitch:0.12, dist:15, tx:0, ty:12.5, tz:0},
+  wellhead:{yaw:0.5,  pitch:0.10, dist:13, tx:0, ty:3.2, tz:0},
+  catwalk: {yaw:-0.7, pitch:0.22, dist:24, tx:7, ty:2.5, tz:-5},
+  cutaway: {yaw:0.0,  pitch:0.04, dist:19, tx:0, ty:-4.5, tz:0},
+};
+function setCameraPreset(name){
+  const p=CAM_PRESETS[name]; if(!p) return;
+  Object.assign(camGoal,p); camUser=true;
+}
+function createCameraControls(){
+  let mode=0, px=0, py=0;            // mode: 0 none, 1 orbit, 2 pan
   const el=renderer.domElement;
-  el.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;});
-  addEventListener('pointermove',e=>{ if(!drag)return;
-    cam.yaw -= (e.clientX-px)*0.005; cam.pitch += (e.clientY-py)*0.004;
-    cam.pitch=Math.max(-0.15,Math.min(1.1,cam.pitch)); px=e.clientX; py=e.clientY; });
-  addEventListener('pointerup',()=>drag=false);
-  el.addEventListener('wheel',e=>{ cam.dist=Math.max(11,Math.min(48,cam.dist+e.deltaY*0.02)); },{passive:true});
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  el.addEventListener('pointerdown',e=>{
+    px=e.clientX; py=e.clientY; camUser=true;
+    mode = (e.button===2 || e.shiftKey) ? 2 : 1;
+  });
+  addEventListener('pointermove',e=>{
+    if(!mode) return;
+    const dx=e.clientX-px, dy=e.clientY-py; px=e.clientX; py=e.clientY;
+    if(mode===1){
+      camGoal.yaw -= dx*0.005; camGoal.pitch += dy*0.004;
+    } else {
+      const k=camGoal.dist*0.0016;
+      camGoal.tx -= Math.cos(camGoal.yaw)*dx*k;
+      camGoal.tz += Math.sin(camGoal.yaw)*dx*k;
+      camGoal.ty += dy*k;
+    }
+    clampCam();
+  });
+  addEventListener('pointerup',()=>mode=0);
+  el.addEventListener('wheel',e=>{ camUser=true; camGoal.dist+=e.deltaY*0.02; clampCam(); },{passive:true});
+  // preset + zoom + reset buttons
+  document.querySelectorAll('#camPanel button[data-cam]').forEach(b=>{
+    b.onclick=()=>setCameraPreset(b.dataset.cam);
+  });
+  $('camZoomIn').onclick =()=>{ camUser=true; camGoal.dist-=4; clampCam(); };
+  $('camZoomOut').onclick=()=>{ camUser=true; camGoal.dist+=4; clampCam(); };
+  $('camReset').onclick  =()=>{ Object.assign(camGoal,CAM_PRESETS.overview); camUser=false; };
 }
 
 /* ============ 6. HUD — 2D canvases & readouts ============ */
@@ -890,6 +1322,9 @@ ui.run.onclick=()=>{ AudioFX.init(); st.autoRun=!st.autoRun; st.phase='idle';
 $('sndBtn').onclick=()=>{ AudioFX.init(); $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; };
 $('sndBtn').textContent = AudioFX.enabled ? '🔊' : '🔇';
 
+$('btnAddJoint').onclick=()=>{ AudioFX.init(); startAddJoint(); };
+createCameraControls();
+
 addEventListener('keydown',e=>{
   if(e.repeat) return; AudioFX.init();
   switch(e.key.toLowerCase()){
@@ -903,6 +1338,7 @@ addEventListener('keydown',e=>{
     case 'd': if(st.mode==='manual') setSlip('travL',!st.travL); break;
     case 'z': st.held.annDn=true; break;
     case 'x': st.held.annUp=true; break;
+    case 'j': startAddJoint(); break;
     case 'm': $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; break;
     case 'escape': setPaused(!st.paused); break;
   }
@@ -943,6 +1379,7 @@ function startLevel(lvl){
   });
   Object.assign(st, makeJointTable(st.mapDepth));
   st.wasLight=pipeLight();
+  st.jh.state='idle'; st.jh.t=0; st.jh.step=0;
   setDir(st.stage==='out' ? -1 : 1); setMode(st.mode); refreshSlipBtns();
   $('ovlPause').classList.add('hidden'); $('pauseBtn').textContent='⏸';
   ui.lvl.textContent=lvl;
@@ -1404,18 +1841,31 @@ function frame(){
   // wellbore pressure glow
   wellGlowMat.opacity=0.18+Math.min(0.5,st.P/(st.p0+600)*0.45)+0.05*Math.sin(performance.now()/250);
 
-  // particles
+  // particles + joint handling + animated emissives
   gasFx.update(dt); sparkFx.update(dt); streakFx.update(dt);
+  if(!st.paused) updateJointHandling(dt);
+  const fl=performance.now();
+  for(const f of flickerMats){
+    const v=f.base + f.amt*(Math.sin(fl/90+f.base)*0.5+Math.sin(fl/37+f.amt)*0.3+ (Math.random()-0.5)*0.4);
+    if(f.light) f.mat.intensity=Math.max(0,v); else f.mat.emissiveIntensity=Math.max(0,v);
+  }
 
-  // camera
+  // camera — idle auto-spin until the user takes control, then ease toward the goal
+  if(!camUser && !st.playing) camGoal.yaw -= dt*0.06;
+  const k=1-Math.exp(-dt*7);
+  cam.yaw  += (camGoal.yaw  -cam.yaw )*k;
+  cam.pitch+= (camGoal.pitch-cam.pitch)*k;
+  cam.dist += (camGoal.dist -cam.dist)*k;
+  cam.tx   += (camGoal.tx   -cam.tx)*k;
+  cam.ty   += (camGoal.ty   -cam.ty)*k;
+  cam.tz   += (camGoal.tz   -cam.tz)*k;
   st.shake=Math.max(0,st.shake-dt*1.2);
-  const sh=st.shake, t=performance.now();
-  const yaw=cam.yaw + (st.playing?0:t*0.00006);
+  const sh=st.shake;
   camera.position.set(
-    cam.tx+Math.sin(yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5,
+    cam.tx+Math.sin(cam.yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5,
     cam.ty+Math.sin(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5,
-    Math.cos(yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5);
-  camera.lookAt(cam.tx,cam.ty,0);
+    cam.tz+Math.cos(cam.yaw)*Math.cos(cam.pitch)*cam.dist + (Math.random()-0.5)*sh*0.5);
+  camera.lookAt(cam.tx,cam.ty,cam.tz);
 
   renderer.render(scene,camera);
 }

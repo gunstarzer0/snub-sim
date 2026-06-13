@@ -3,6 +3,21 @@
 All notable changes to SNUB FORCE are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/) (pre-1.0: minor = feature round, patch = fixes/balance).
 
+## [0.4.0] — 2026-06-13
+
+Realism & immersion pass — environment, branding, joint handling, and camera. No physics or balance changes.
+
+### Added
+- **"Jack in Black" livery** — black/yellow branding across the snubbing unit. Jack base and traveling plates repainted black with hazard-stripe trim, yellow accent collars on the hydraulic barrels, and `JACK IN BLACK` canvas-texture decals on the jack base, basket rail, accumulator skid, and equipment trailer. New `makeBrandedMaterial()` plus hazard/grating/brand-decal texture helpers.
+- **Detailed work basket (`createBasketDetails`)** — grating floor, yellow toe-boards/kickplates, mid-rails, a control console with levers/knobs and indicator lights, draped hose bundles, a toolbox, and corner work lights — giving clear visual separation between the traveling assembly, basket, jack frame, and slip bowl.
+- **Oilfield lease environment (`createLeasePad`)** — gravel lease pad with rig mats, an accumulator (BOP control) skid with nitrogen bottles, a pump/pressure-control skid, a guyed flare stack with a flickering flame + light, snaking hose runs, safety cones/barricades, work-light towers, and a branded equipment trailer. All kept behind the cut plane so the underground cutaway stays unobstructed.
+- **Catwalk & pipe rack (`createCatwalkAndPipeRack`)** — a V-trough catwalk with a V-door ramp and a pipe rack holding stacked joint inventory beside the unit.
+- **Add Joint sequence** — `ADD JOINT` button (and `J` key) drives a staged pickup animation through `idle → attaching → lifting → swinging → aligned`, with pickup elevators, a crane boom + hanging sheave block, and a dynamic winch line (`createJointHandlingSystem` / `updateJointHandling`). A HUD status readout reports the current handling state; completed joints increment a per-shift "staged" tally. Purely cosmetic — it does **not** touch the depth/joint scoring tally.
+- **Enhanced camera (`createCameraControls` / `setCameraPreset`)** — smooth eased orbit, zoom, right-drag/Shift pan, and reset, plus preset view buttons (Overview, Basket, Wellhead, Catwalk, Cutaway). The idle title-screen auto-spin is preserved until the user takes control.
+
+### Changed
+- Animated emissives (flare flame, work lights) flicker via a shared `flickerMats` pass in the render loop.
+
 ## [0.3.0] — 2026-06-10
 
 ### Added

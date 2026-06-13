@@ -44,9 +44,12 @@ Levels also schedule **well events** (gas pockets, pressure drops, sand slugs) w
 | `E` / `D` | Traveling heavy / snub slips |
 | `B` / `P` | Bleed / pump wellhead pressure |
 | `Z` / `X` | Annular closing pressure down / up (or slider) |
+| `J` | Add joint — pick up & stab a joint from the catwalk |
 | `Esc` | Pause |
 | `M` | Sound toggle |
 | Mouse drag / wheel | Orbit / zoom camera |
+| Right-drag / `Shift`-drag | Pan camera |
+| Camera panel | Preset views (Overview / Basket / Wellhead / Catwalk / Cutaway), zoom, reset |
 | **AUTO mode** | Rig sequences slips & jack; you manage pressure only |
 
 ---
