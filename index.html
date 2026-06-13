@@ -105,6 +105,14 @@
     padding:5px 16px;z-index:5;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
   #jhStatus.show{opacity:1;}
   #btnAddJoint.active{background:var(--warn);border-color:var(--warn);color:#14100a;}
+  /* rig status panel */
+  #statusPanel{font-size:11px;font-family:Consolas,"Cascadia Mono",monospace;}
+  #statusPanel h4{margin:0 0 5px;}
+  .srow{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,140,26,.12);}
+  .srow:last-child{border-bottom:none;}
+  .slbl{opacity:.7;font-size:10px;letter-spacing:.5px;}
+  .sval{font-weight:700;font-size:11px;}
+  .sval.open{color:#7ec8ff;} .sval.closed{color:#3ddc7a;} .sval.engaged{color:#3ddc7a;} .sval.disengaged{color:#9fb0c0;} .sval.loaded{color:#ffd23d;} .sval.unloaded{color:#9fb0c0;}
 </style>
 </head>
 <body>
@@ -136,7 +144,7 @@
     </div>
     <h4 style="margin-top:10px;">ANNULAR SEAL</h4>
     <div id="sealBar"><div id="sealFill"></div></div>
-    <h4 style="margin-top:10px;">ANNULAR CLOSING PRESSURE <span class="kbd">[Z/X]</span></h4>
+    <h4 style="margin-top:10px;">ANNULAR CLOSING PRESSURE <span class="kbd">[ [ / ] ]</span></h4>
     <input type="range" id="annSlider" min="0" max="100" value="60">
     <div id="annInfo" class="mono" style="font-size:11px;text-align:center;">SET 60 · REQUIRED ~35</div>
     <div id="forceRead" class="mono">
@@ -170,16 +178,27 @@
     <div class="row">
       <span class="sliplbl">TRAV<br>SLIPS</span>
       <button class="btn" id="btnTravH">HEAVY <span class="kbd">[E]</span></button>
-      <button class="btn" id="btnTravL">SNUB <span class="kbd">[D]</span></button>
+      <button class="btn" id="btnTravL">SNUB <span class="kbd">[Q]</span></button>
     </div>
     <div class="row">
       <span class="sliplbl">STAT<br>SLIPS</span>
-      <button class="btn engaged" id="btnStatH">HEAVY <span class="kbd">[Q]</span></button>
+      <button class="btn engaged" id="btnStatH">HEAVY <span class="kbd">[D]</span></button>
       <button class="btn engaged" id="btnStatL">SNUB <span class="kbd">[A]</span></button>
     </div>
     <div class="row">
-      <button class="btn" id="btnAddJoint">⬇ ADD JOINT <span class="kbd">[J]</span></button>
+      <button class="btn" id="btnTongs">🔧 TONGS <span class="kbd">[X]</span></button>
+      <button class="btn" id="btnAddJoint">⬇ JOINT <span class="kbd">[Z]</span></button>
     </div>
+  </div>
+
+  <div class="panel-inner" id="statusPanel">
+    <h4>RIG STATUS</h4>
+    <div class="srow"><span class="slbl">TRAV SNUB SLIPS</span><span class="sval" id="stTravL">OPEN</span></div>
+    <div class="srow"><span class="slbl">TRAV HEAVY SLIPS</span><span class="sval" id="stTravH">OPEN</span></div>
+    <div class="srow"><span class="slbl">STAT SNUB SLIPS</span><span class="sval" id="stStatL">CLOSED</span></div>
+    <div class="srow"><span class="slbl">STAT HEAVY SLIPS</span><span class="sval" id="stStatH">CLOSED</span></div>
+    <div class="srow"><span class="slbl">TONGS</span><span class="sval" id="stTongs">DISENGAGED</span></div>
+    <div class="srow"><span class="slbl">CRANE HOOK</span><span class="sval" id="stCrane">UNLOADED</span></div>
   </div>
 </div>
 
@@ -205,7 +224,7 @@
 
 <div id="toast"></div>
 <div id="jhStatus"></div>
-<div id="hintbar">Drag orbit · Right-drag/Shift pan · Scroll zoom · W/S jack · Q/A·E/D slips · B/P pressure · Z/X annular · J add joint · M sound</div>
+<div id="hintbar">Drag orbit · Right-drag/Shift pan · Scroll zoom · W/S jack · Q/E trav snub/heavy · A/D stat snub/heavy · B/P pressure · [/] annular · Z joint · X tongs · M sound</div>
 
 <div class="ovl" id="ovlTitle">
   <div class="card">
@@ -216,12 +235,12 @@
     pressure in the green band — bleed off surge as you strip in, but don't swab it down into a kick.</p>
     <div class="ctl">
       <span><b>W / S</b> — jack extend / retract</span>
-      <span><b>Q / A</b> — stationary heavy / snub slips</span>
-      <span><b>E / D</b> — traveling heavy / snub slips</span>
+      <span><b>Q / E</b> — trav snub / heavy slips</span>
+      <span><b>A / D</b> — stat snub / heavy slips</span>
       <span><b>B / P</b> — bleed / pump pressure</span>
-      <span><b>Z / X</b> — annular closing pressure</span>
+      <span><b>[ / ]</b> — annular closing pressure</span>
+      <span><b>Z</b> — add joint &nbsp; <b>X</b> — tongs</span>
       <span><b>AUTO mode</b> — rig sequences slips & jack for you; you manage pressure</span>
-      <span><b>Golden ring</b> — neutral point: above it the pipe is LIGHT and only SNUB slips hold it</span>
       <span><b>Slip types</b> — HEAVY slips carry heavy pipe; SNUB slips restrain light pipe</span>
     </div>
     <p style="text-align:center;opacity:.7;">Manual cycle (snub in): jack up empty → grip TRAVELING → release STATIONARY → jack down → set STATIONARY → release TRAVELING → repeat. Match the slip type to the load — and never close slips on a tool joint.</p>
@@ -450,7 +469,7 @@ const st = {
   jointLens:[], jointCum:[],
   // pipe & rig — four slips: heavy holds pipe-heavy, snub holds pipe-light
   depth:0, prevDepth:0, jack:0,
-  travH:false, travL:false, statH:true, statL:true,
+  travH:false, travL:false, statH:true, statL:true, tongs:false,
   travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
   mode:'manual', dir:1, autoRun:false, phase:'idle',
   // well
@@ -568,7 +587,7 @@ const M = {
   collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
   rail:  new THREE.MeshStandardMaterial({color:0xd8b53a, roughness:.6, metalness:.3}),
   snub:  new THREE.MeshStandardMaterial({color:0x5fb4e8, roughness:.5, metalness:.4}),
-  // Jack in Black livery + lease environment
+  // Team Snubbing livery + lease environment
   black: new THREE.MeshStandardMaterial({color:0x141519, roughness:.5, metalness:.55}),
   yellow:new THREE.MeshStandardMaterial({color:0xf2c012, roughness:.5, metalness:.3}),
   gravel:new THREE.MeshStandardMaterial({color:0x4b4843, roughness:1, metalness:0}),
@@ -673,6 +692,9 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   const dome=new THREE.Mesh(new THREE.SphereGeometry(0.95,24,12,0,Math.PI*2,0,Math.PI/2),M.steelDk);
   add(dome,4.85);
   add(cyl(1.25,1.25,0.22,M.steelDk),5.1);           // top flange
+  // stripper/lubricator spool (short) above BOP top flange
+  add(cyl(0.52,0.52,0.2,M.steel),5.33);
+  add(cyl(0.68,0.68,0.08,M.steelDk),5.44);          // connection flange
 
   // jack base plate + stationary slip station (heavy above, snub inverted below)
   const base=add(box(3.6,0.28,3.6,M.black),5.4);
@@ -731,17 +753,17 @@ const JH_LEN = 8.2;                // active/inventory joint length, world units
 const easeIO = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
 const lerp = (a,b,t)=>a+(b-a)*t;
 
-// --- canvas textures for the Jack in Black livery ---
+// --- canvas textures for the Team Snubbing livery ---
 function brandDecalTex(text){
   const c=document.createElement('canvas'); c.width=512; c.height=128;
   const g=c.getContext('2d');
   g.fillStyle='#141519'; g.fillRect(0,0,512,128);
   g.fillStyle='#f2c012'; g.fillRect(0,0,512,9); g.fillRect(0,119,512,9);
-  g.font='bold 58px Arial, "Arial Black", sans-serif'; g.fillStyle='#f2c012';
-  g.textAlign='center'; g.textBaseline='middle'; g.fillText(text||'JACK IN BLACK',256,66);
+  g.font='bold 52px Arial, "Arial Black", sans-serif'; g.fillStyle='#f2c012';
+  g.textAlign='center'; g.textBaseline='middle'; g.fillText(text||'TEAM SNUBBING',256,66);
   const tx=new THREE.CanvasTexture(c); tx.colorSpace=THREE.SRGBColorSpace; tx.anisotropy=4; return tx;
 }
-const brandTex = brandDecalTex('JACK IN BLACK');
+const brandTex = brandDecalTex('TEAM SNUBBING');
 function brandSign(w,h){
   const m=new THREE.MeshStandardMaterial({map:brandTex, roughness:.55, metalness:.2});
   return new THREE.Mesh(new THREE.PlaneGeometry(w,h), m);
@@ -1329,6 +1351,12 @@ $('sndBtn').onclick=()=>{ AudioFX.init(); $('sndBtn').textContent=AudioFX.toggle
 $('sndBtn').textContent = AudioFX.enabled ? '🔊' : '🔇';
 
 $('btnAddJoint').onclick=()=>{ AudioFX.init(); startAddJoint(); };
+function toggleTongs(){
+  AudioFX.init(); st.tongs=!st.tongs; AudioFX.clack();
+  $('btnTongs').classList.toggle('engaged',st.tongs);
+  toast(st.tongs?'TONGS ENGAGED — MAKE UP CONNECTION':'TONGS DISENGAGED',true);
+}
+$('btnTongs').onclick=toggleTongs;
 createCameraControls();
 
 addEventListener('keydown',e=>{
@@ -1338,12 +1366,14 @@ addEventListener('keydown',e=>{
     case 's': case 'arrowdown': st.held.dn=true; ui.dn.classList.add('held'); break;
     case 'b': st.held.bleed=true; ui.bleed.classList.add('held'); break;
     case 'p': st.held.pump=true; ui.pump.classList.add('held'); break;
-    case 'q': if(st.mode==='manual') setSlip('statH',!st.statH); break;
+    case 'q': if(st.mode==='manual') setSlip('travL',!st.travL); break;
     case 'a': if(st.mode==='manual') setSlip('statL',!st.statL); break;
     case 'e': if(st.mode==='manual') setSlip('travH',!st.travH); break;
-    case 'd': if(st.mode==='manual') setSlip('travL',!st.travL); break;
-    case 'z': st.held.annDn=true; break;
-    case 'x': st.held.annUp=true; break;
+    case 'd': if(st.mode==='manual') setSlip('statH',!st.statH); break;
+    case '[': st.held.annDn=true; break;
+    case ']': st.held.annUp=true; break;
+    case 'z': startAddJoint(); break;
+    case 'x': toggleTongs(); break;
     case 'j': startAddJoint(); break;
     case 'm': $('sndBtn').textContent=AudioFX.toggle()?'🔊':'🔇'; break;
     case 'escape': setPaused(!st.paused); break;
@@ -1355,8 +1385,8 @@ addEventListener('keyup',e=>{
     case 's': case 'arrowdown': st.held.dn=false; ui.dn.classList.remove('held'); break;
     case 'b': st.held.bleed=false; ui.bleed.classList.remove('held'); break;
     case 'p': st.held.pump=false; ui.pump.classList.remove('held'); break;
-    case 'z': st.held.annDn=false; break;
-    case 'x': st.held.annUp=false; break;
+    case '[': st.held.annDn=false; break;
+    case ']': st.held.annUp=false; break;
   }
 });
 
@@ -1375,7 +1405,7 @@ function startLevel(lvl){
     stageStartDepth:cfg.startDepth,
     mapDepth:Math.max(cfg.target,cfg.startDepth),
     depth:cfg.startDepth, prevDepth:cfg.startDepth, jack:0,
-    travH:false, travL:false, statH:true, statL:true,
+    travH:false, travL:false, statH:true, statL:true, tongs:false,
     travHAnim:0, travLAnim:0, statHAnim:1, statLAnim:1,
     autoRun:false, phase:'idle',
     P:cfg.p0, seal:100, blowT:0, kickT:0, kicking:false, runawayT:0,
@@ -1386,6 +1416,7 @@ function startLevel(lvl){
   Object.assign(st, makeJointTable(st.mapDepth));
   st.wasLight=pipeLight();
   st.jh.state='idle'; st.jh.t=0; st.jh.step=0;
+  $('btnTongs').classList.remove('engaged');
   setDir(st.stage==='out' ? -1 : 1); setMode(st.mode); refreshSlipBtns();
   $('ovlPause').classList.add('hidden'); $('pauseBtn').textContent='⏸';
   ui.lvl.textContent=lvl;
@@ -1704,7 +1735,7 @@ function update(dt){
     if(Math.random()<0.35)
       gasFx.spawn(rnd(-0.4,0.4),5.2,rnd(-0.4,0.4),rnd(-0.4,0.4),rnd(1,2.5),rnd(-0.4,0.4),rnd(0.8,1.8));
     st.annWarnT+=dt;
-    if(st.annWarnT>2.5){ st.annWarnT=0; toast('ANNULAR LEAKING — RAISE CLOSING PRESSURE [X]'); }
+    if(st.annWarnT>2.5){ st.annWarnT=0; toast('ANNULAR LEAKING — RAISE CLOSING PRESSURE []]'); }
   } else st.annWarnT=0;
   if(annOver && moving) st.seal-=3*dt;     // over-squeezed: friction chews the element
 
@@ -1791,6 +1822,18 @@ function refreshHUD(dt){
   ui.badge.textContent=light?'▲ PIPE LIGHT — SNUBBING':'▼ PIPE HEAVY — CONVENTIONAL';
   ui.badge.classList.toggle('heavy',!light);
   if(toastT>0){ toastT-=dt; if(toastT<=0) ui.toast.className=''; }
+  // rig status panel
+  function sv(id, val, trueClass, falseClass){
+    const el=$( id); el.textContent=val?trueClass.toUpperCase():falseClass.toUpperCase();
+    el.className='sval '+(val?trueClass:falseClass);
+  }
+  sv('stTravL',st.travL,'closed','open');
+  sv('stTravH',st.travH,'closed','open');
+  sv('stStatL',st.statL,'closed','open');
+  sv('stStatH',st.statH,'closed','open');
+  sv('stTongs', st.tongs,'engaged','disengaged');
+  const craneLoaded = st.jh && st.jh.state!=='idle';
+  sv('stCrane', craneLoaded,'loaded','unloaded');
   drawDiagram(); drawGauge();
 }
 
