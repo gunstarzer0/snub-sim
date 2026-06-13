@@ -1,13 +1,13 @@
 name: Deploy to GitHub Pages
 
 # Publishes the static single-file app (index.html) to GitHub Pages.
-# Deploys from `main` (the shippable site) and from the active development
-# branch so work-in-progress can be tested at the live URL.
+# Deploys from `main` only (the github-pages environment restricts deployments
+# to the default branch). To publish work-in-progress, merge it to `main`.
+# `workflow_dispatch` allows a manual deploy from the Actions tab.
 on:
   push:
     branches:
       - main
-      - claude/festive-brown-nyychf
   workflow_dispatch:
 
 # Permissions required for the GitHub Pages deployment.
