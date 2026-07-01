@@ -1,20 +1,20 @@
-# SnubWorks — deploy on the TEAMFORCE VPS.
+# SnubWorks — base compose (local / standalone).
 #
-#   git clone https://github.com/gunstarzer0/snub-sim.git snubworks
-#   cd snubworks
-#   docker compose up -d --build
+# Local preview:
+#   docker compose up -d --build      # -> http://localhost:8081
 #
-# To update after new commits land on the branch you deploy from:
-#   git pull && docker compose up -d --build
-#
-# The app listens on port 8081 on the host by default. Put your existing
-# reverse proxy (the one already fronting TeamForce) in front of it, or
-# change the published port below.
+# Production on the TEAMFORCE VPS layers the prod override on top, which drops
+# the host port and attaches the container to TeamForce's Caddy network:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 services:
   snubworks:
     build: .
     image: snubworks:latest
     container_name: snubworks
     restart: unless-stopped
+    expose:
+      - "80"
+    # Host port is for LOCAL use only; the prod override removes it so nothing
+    # competes with TeamForce or exposes the app outside the reverse proxy.
     ports:
       - "8081:80"

@@ -165,42 +165,31 @@ npx http-server . -p 8347
 
 Requires WebGL and an internet connection for the Three.js CDN.
 
-## Deployment (Docker, on the TEAMFORCE VPS)
+## Deployment
 
-SnubWorks ships as a static single-file app served by nginx in a container —
-the same pattern as the TeamForce app on the VPS.
+SnubWorks is a **static single-file app** (Three.js from cdnjs) served by nginx
+in a container — no backend, API, or database.
+
+**Local preview:**
+```sh
+docker compose up -d --build      # http://localhost:8081
+```
+
+**Production (TEAMFORCE VPS, alongside TeamForce):** SnubWorks reuses TeamForce's
+existing Caddy — it runs no proxy of its own and publishes no host ports. The
+prod override attaches the container to TeamForce's Caddy network, and one site
+block appended to TeamForce's Caddyfile routes `snubworks.teamsnubbing.com` to
+`snubworks:80`.
 
 ```sh
-# on TEAMFORCE, first time:
-git clone https://github.com/gunstarzer0/snub-sim.git snubworks
-cd snubworks
-docker compose up -d --build
-
-# to update after new commits:
-git pull && docker compose up -d --build
+cd /opt/snubworks-git
+echo "CADDY_NETWORK=teamforce-git_default" > .env       # match TeamForce's Caddy network
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-The container publishes on host port **8081** (`docker-compose.yml`). Point your
-existing reverse proxy (the one already fronting TeamForce) at
-`http://127.0.0.1:8081`, or change the published port to suit.
-
-Example nginx reverse-proxy server block on the host:
-
-```nginx
-server {
-    server_name snubworks.example.com;   # your domain / subdomain
-    location / {
-        proxy_pass http://127.0.0.1:8081;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    # add TLS with: certbot --nginx -d snubworks.example.com
-}
-```
-
-Health check: the image reports container health via `GET /`. Verify with
-`docker ps` (look for `healthy`) or `curl -I http://127.0.0.1:8081`.
+Full step-by-step (inspect → deploy → Caddy → Cloudflare → smoke tests →
+rollback) is in [`deploy/DEPLOY.md`](deploy/DEPLOY.md). Supporting files:
+`docker-compose.prod.yml`, `deploy/Caddyfile`, `deploy/env.example`.
 
 ## License
 

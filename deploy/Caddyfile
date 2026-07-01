@@ -1,0 +1,18 @@
+# SnubWorks — Caddy site block.
+#
+# TeamForce runs the ONE Caddy that owns ports 80/443 on this VPS. Do NOT start
+# a second Caddy. Instead, add this block to TeamForce's Caddyfile so the
+# existing Caddy also serves SnubWorks:
+#
+#   cd /opt/teamforce-git
+#   cp deploy/Caddyfile deploy/Caddyfile.bak.$(date +%Y%m%d-%H%M%S)   # back up first
+#   cat /opt/snubworks-git/deploy/Caddyfile >> deploy/Caddyfile        # append this block
+#   # then reload Caddy (see /opt/snubworks-git/deploy/DEPLOY.md step 3)
+#
+# `snubworks` resolves by container name because the SnubWorks container is
+# attached to TeamForce's Caddy network (docker-compose.prod.yml). Caddy
+# auto-issues TLS for this hostname the same way it does for teamforce.*.
+
+snubworks.teamsnubbing.com {
+	reverse_proxy snubworks:80
+}

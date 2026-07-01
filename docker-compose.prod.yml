@@ -1,0 +1,24 @@
+# SnubWorks — production override for the TEAMFORCE VPS.
+#
+# Reuses TeamForce's existing Caddy (which owns 80/443). SnubWorks runs NO
+# reverse proxy of its own — it just exposes :80 on a shared docker network
+# that TeamForce's Caddy is already attached to, and Caddy routes to it by
+# container name (snubworks:80).
+#
+#   cd /opt/snubworks-git
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Set CADDY_NETWORK to the network TeamForce's Caddy is on (see deploy/DEPLOY.md
+# step 1 for how to find it). Put it in a .env file next to this compose:
+#   echo "CADDY_NETWORK=teamforce-git_default" > .env
+services:
+  snubworks:
+    # no host ports in prod — Caddy reaches the container over the shared network
+    ports: !reset []
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${CADDY_NETWORK:-teamforce-git_default}

@@ -1,195 +1,167 @@
-# Deploying SnubWorks to the TEAMFORCE VPS
+# Deploying SnubWorks alongside TeamForce (shared Caddy)
 
-Target public URL: **https://snubworks.teamsnubbing.com**
-Repo: `https://github.com/gunstarzer0/snub-sim` · branch: `main`
+| | |
+|---|---|
+| VPS | DigitalOcean droplet `134.122.46.229` |
+| Existing app | TeamForce — `https://teamforce.teamsnubbing.com` at `/opt/teamforce-git` |
+| New app | SnubWorks — `https://snubworks.teamsnubbing.com` at `/opt/snubworks-git` |
+| Pattern | Docker Compose + **one shared Caddy** (owned by TeamForce) on 80/443 |
+| Repo / branch | `https://github.com/gunstarzer0/snub-sim` · `main` |
 
-Run every command below **on the TEAMFORCE droplet** (SSH in first). Nothing
-here touches the existing TeamForce app until the reverse-proxy step, which
-only *adds* a vhost. Fill in the two unknowns as you go:
-`<DROPLET_PUBLIC_IP>` and your proxy stack (discovered in step 1).
+**Architecture:** SnubWorks is a **static frontend only** — a single `index.html`
+(Three.js loaded from cdnjs) served by nginx inside its container. No backend,
+no API, no database, no Postgres, no env secrets, no Ollama. So there is nothing
+internal to expose or protect beyond keeping the container off the public
+interface. SnubWorks runs **no Caddy of its own** — it joins TeamForce's Caddy
+network and the existing Caddy routes to it by container name.
 
----
-
-## 1. Inspect the existing layout (read-only — change nothing yet)
-
-```sh
-# running containers + their published ports
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
-
-# everything listening on the host (identify the proxy + free ports)
-sudo ss -tlnp | sort -k4
-
-# where apps live — check the common conventions
-ls -la /opt/teamforce/apps 2>/dev/null; ls -la /opt 2>/dev/null; ls -la /srv 2>/dev/null
-
-# identify the reverse-proxy stack (whichever prints something wins)
-docker ps --format '{{.Image}} {{.Names}}' | grep -Ei 'nginx|caddy|traefik|cloudflared'
-systemctl is-active nginx caddy 2>/dev/null
-sudo nginx -v 2>&1; caddy version 2>/dev/null
-docker network ls
+SSH in first (from Windows PowerShell):
+```powershell
+ssh -i $env:USERPROFILE\.ssh\teamforce_tools root@134.122.46.229
 ```
 
-Record, before changing anything:
-- app root convention (e.g. `/opt/teamforce/apps/<app>`)
-- proxy stack: **host-nginx / containerized-nginx / Caddy / Traefik / cloudflared**
-- if Traefik/containerized-nginx: the shared docker network name
-- ports already in use (confirm **8081** is free; if not, pick the next free one)
+---
+
+## 1. Inspect — change nothing yet
+
+```sh
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+docker compose ls
+ls -la /opt
+ls -la /opt/teamforce-git
+cd /opt/teamforce-git && docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+cd /opt/teamforce-git && cat deploy/Caddyfile
+
+# find the Caddy container name and the network it's on (needed below)
+CADDY=$(docker ps --filter name=caddy --format '{{.Names}}')
+echo "caddy container: $CADDY"
+docker inspect "$CADDY" -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker inspect "$CADDY" -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'  # where Caddyfile is mounted
+```
+
+Record: the Caddy **container name**, its **network name** (e.g.
+`teamforce-git_default`), and the **path** its Caddyfile is mounted from
+(should be `/opt/teamforce-git/deploy/Caddyfile`). Confirm no container already
+uses the name `snubworks`.
 
 ---
 
-## 2. Deploy the app
+## 2. Clone SnubWorks (separate path — TeamForce untouched)
 
 ```sh
-# use the existing convention if it differs from this default
-sudo mkdir -p /opt/teamforce/apps
-cd /opt/teamforce/apps
-sudo git clone https://github.com/gunstarzer0/snub-sim.git snubworks
-cd snubworks
+cd /opt
+git clone https://github.com/gunstarzer0/snub-sim.git snubworks-git
+cd /opt/snubworks-git
 git checkout main
 
-# --- choose the compose invocation that matches your proxy stack ---
-
-# A) host nginx / host Caddy  -> bind to loopback only (proxy is on the host):
-docker compose -f docker-compose.yml -f deploy/docker-compose.loopback.yml up -d --build
-
-# B) Traefik (container network routing, no host port):
-# docker compose -f docker-compose.yml -f deploy/docker-compose.traefik.yml up -d --build
-
-# C) containerized nginx that shares a docker network:
-# attach the container to that network, keep the base compose, and proxy to
-# http://snubworks:80 by container name (see step 3-C).
+# tell the prod override which network TeamForce's Caddy is on
+echo "CADDY_NETWORK=<network-from-step-1>" > .env      # e.g. teamforce-git_default
 ```
-
-Confirm health + local response:
-
-```sh
-docker compose ps
-docker ps --filter name=snubworks --format '{{.Names}} {{.Status}}'   # expect "healthy"
-curl -I http://127.0.0.1:8081                                         # expect HTTP/1.1 200
-```
-
-> **Port already taken?** Edit the port in
-> `deploy/docker-compose.loopback.yml` (or the base `docker-compose.yml`),
-> re-run `up -d`, and use the new port everywhere below.
 
 ---
 
-## 3. Reverse-proxy routing (adds a vhost; existing routes untouched)
+## 3. Start SnubWorks + add its route to the shared Caddy
 
-### 3-A · Host nginx
 ```sh
-sudo cp deploy/snubworks.nginx.conf /etc/nginx/sites-available/snubworks.teamsnubbing.com
-sudo ln -s /etc/nginx/sites-available/snubworks.teamsnubbing.com /etc/nginx/sites-enabled/
-# get a cert (webroot must match the acme location in the site file):
-sudo certbot certonly --webroot -w /var/www/certbot -d snubworks.teamsnubbing.com
-sudo nginx -t && sudo systemctl reload nginx      # test BEFORE reload
+cd /opt/snubworks-git
+
+# a) build & start the static container on the shared network (no host ports)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps      # expect "healthy"
+
+# b) BACK UP TeamForce's Caddyfile, then append the SnubWorks site block
+cd /opt/teamforce-git
+cp deploy/Caddyfile deploy/Caddyfile.bak.$(date +%Y%m%d-%H%M%S)
+cat /opt/snubworks-git/deploy/Caddyfile >> deploy/Caddyfile
+tail -n 8 deploy/Caddyfile        # sanity-check the block landed
+
+# c) validate + reload the EXISTING Caddy (no restart, no downtime)
+docker exec <caddy-container> caddy validate --config /etc/caddy/Caddyfile
+docker exec <caddy-container> caddy reload   --config /etc/caddy/Caddyfile
 ```
 
-### 3-B · Caddy
-```sh
-cat deploy/snubworks.Caddyfile | sudo tee -a /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy            # Caddy auto-issues the TLS cert
-```
-
-### 3-C · Containerized nginx
-Add a site file into the proxy container's conf dir (mounted volume), using the
-container name as upstream instead of a host port:
-```nginx
-location / { proxy_pass http://snubworks:80; ... }   # same network required
-```
-```sh
-docker network connect <proxy_network> snubworks     # if not already shared
-docker exec <nginx_container> nginx -t && docker exec <nginx_container> nginx -s reload
-```
-
-### 3-D · Traefik
-Nothing more — the labels in `deploy/docker-compose.traefik.yml` register the
-route and request the cert automatically. Verify in the Traefik dashboard/logs.
-
-### 3-E · Cloudflare Tunnel (cloudflared)
-Add an ingress rule to the tunnel config (`/etc/cloudflared/config.yml`):
-```yaml
-ingress:
-  - hostname: snubworks.teamsnubbing.com
-    service: http://127.0.0.1:8081
-  # ...existing rules stay ABOVE the catch-all...
-  - service: http_status:404
-```
-```sh
-sudo systemctl restart cloudflared
-```
-> With a Tunnel you SKIP step 4's A record — add a **CNAME**
-> `snubworks -> <TUNNEL_ID>.cfargotunnel.com` (proxied) instead, or let
-> `cloudflared tunnel route dns` create it.
+> If Caddy's Caddyfile is mounted from `/opt/teamforce-git/deploy/Caddyfile`,
+> the appended block is already inside the container — `reload` picks it up.
+> If TeamForce instead restarts Caddy via compose, use its normal command
+> (`docker compose ... up -d`) — do **not** run `down`.
 
 ---
 
-## 4. Cloudflare DNS (skip if using a Tunnel — see 3-E)
+## 4. Cloudflare DNS (zone: teamsnubbing.com)
 
-Dashboard → teamsnubbing.com → DNS → **Add record**:
+Create a record that resolves `snubworks` to the droplet — **match whatever
+TeamForce's record uses** so cert issuance behaves identically:
 
 | Field | Value |
 |-------|-------|
-| Type | A |
+| Type | `A` |
 | Name | `snubworks` |
-| Content | `<DROPLET_PUBLIC_IP>` |
-| Proxy | **Proxied** (orange cloud) |
+| Content | `134.122.46.229` |
+| Proxy | **match the `teamforce` record** (see note) |
 | TTL | Auto |
 
-If a wildcard `*.teamsnubbing.com` A record already points at this droplet, the
-subdomain may already resolve — an explicit record is still clearer. If TeamForce
-is reached via a CNAME to another hostname on the same box, a CNAME
-`snubworks -> <that-hostname>` is equivalent.
+Check first: `dig +short teamforce.teamsnubbing.com` and look at the `teamforce`
+record in Cloudflare.
+- If `teamforce` is a **CNAME** to another hostname, make `snubworks` a CNAME to
+  the same target instead of an A record.
+- **Proxy status must match `teamforce`.** If `teamforce` is DNS-only (grey),
+  set `snubworks` grey too — Caddy needs reachable 80/443 for its ACME
+  challenge. If `teamforce` is Proxied (orange) and works, the zone is already
+  configured for that (DNS challenge or Origin CA), so orange is safe here too.
 
 ---
 
 ## 5. Cloudflare SSL/TLS
 
-- SSL/TLS → Overview → mode. **Prefer Full (strict)** — valid with a Let's
-  Encrypt cert (3-A/3-B) or a Cloudflare Origin CA cert on the droplet.
-- If the zone is currently **Flexible**, do NOT change it globally without
-  sign-off — it affects every teamsnubbing.com host. Instead, get a real origin
-  cert for this subdomain and use a per-hostname setting, or confirm the change
-  is safe for TeamForce first.
-- Origin CA option: SSL/TLS → Origin Server → Create Certificate, install the
-  pem/key on the droplet, point the nginx `ssl_certificate*` lines at them.
+Do **not** change the zone-wide SSL mode — TeamForce already works under it, and
+SnubWorks inherits the same setting. Caddy issues/serves the cert for
+`snubworks.teamsnubbing.com` automatically on first request, exactly as it does
+for `teamforce`. Just confirm the final site loads over HTTPS (step 6).
 
 ---
 
-## 6. Validation
+## 6. Smoke tests
 
 ```sh
-docker ps
-docker compose ps
-curl -I http://127.0.0.1:8081                                              # 200, local
-curl -I -H "Host: snubworks.teamsnubbing.com" http://127.0.0.1             # proxy routes host
-curl -I https://snubworks.teamsnubbing.com                                 # public HTTPS 200
-curl -I https://<existing-teamforce-host>                                  # TeamForce still 200
+# on the VPS: SnubWorks reachable from Caddy's network by name
+docker exec <caddy-container> wget -qO- http://snubworks:80/ | head -c 200; echo
+
+# host-level routing through the shared Caddy
+curl -I -H "Host: snubworks.teamsnubbing.com" http://127.0.0.1
+
+# public HTTPS (from anywhere)
+curl -I https://snubworks.teamsnubbing.com          # expect HTTP/2 200
+
+# TeamForce still healthy — MUST still return its normal status
+curl -I https://teamforce.teamsnubbing.com
 ```
 
-Then in a browser at https://snubworks.teamsnubbing.com:
-- app loads, title reads **SnubWorks**
-- DevTools console: no 404s on assets; `three.min.js` loads from the cdnjs CDN
-- response header `cf-ray` present (Cloudflare proxy active); padlock valid
+Browser at https://snubworks.teamsnubbing.com:
+- title reads **SnubWorks**, sim renders
+- DevTools console: no asset 404s; `three.min.js` loads from cdnjs
+- padlock valid; response header `cf-ray` present if the record is Proxied
+
+(No health/API endpoint — this is a static app. `GET /` doubles as the
+container healthcheck.)
 
 ---
 
-## 7. Rollback
+## 7. Rollback (safe — never touches TeamForce data)
 
 ```sh
-# stop + remove just this app (TeamForce untouched)
-cd /opt/teamforce/apps/snubworks && docker compose down
+# 1. remove the SnubWorks route from the shared Caddy
+cd /opt/teamforce-git
+cp deploy/Caddyfile.bak.<timestamp> deploy/Caddyfile      # restore the backup
+docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile
 
-# remove the proxy vhost, then reload
-#   host nginx:  sudo rm /etc/nginx/sites-enabled/snubworks.teamsnubbing.com && sudo nginx -t && sudo systemctl reload nginx
-#   Caddy:       remove the snubworks block from /etc/caddy/Caddyfile && sudo systemctl reload caddy
-#   Traefik:     docker compose down already dropped the labels/route
-#   tunnel:      remove the ingress rule && sudo systemctl restart cloudflared
-
-# Cloudflare: delete the snubworks A/CNAME record (or grey-cloud it)
-
-# full removal:
-cd /opt/teamforce/apps && sudo rm -rf snubworks
+# 2. stop + remove the SnubWorks app  (NOTE: no -v, nothing destructive)
+cd /opt/snubworks-git
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 docker image rm snubworks:latest
+
+# 3. optional: delete the clone and the Cloudflare snubworks record
+cd /opt && rm -rf snubworks-git
 ```
+
+TeamForce is never stopped at any point; the only shared change is one appended
+Caddy block, reverted by restoring the timestamped backup.
