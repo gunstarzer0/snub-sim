@@ -1,0 +1,27 @@
+# SnubWorks — Traefik override.
+# Use this if TEAMFORCE fronts apps with Traefik. It drops the host port
+# publish (Traefik reaches the container over the shared docker network) and
+# adds routing labels.
+#
+# Run with BOTH files so the override is layered on the base compose:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.traefik.yml up -d --build
+#
+# Assumes an external Traefik network named "proxy" and a resolver named
+# "letsencrypt" — rename to match the existing TeamForce Traefik setup.
+services:
+  snubworks:
+    ports: !reset []          # Traefik routes internally; no host port needed
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.snubworks.rule=Host(`snubworks.teamsnubbing.com`)"
+      - "traefik.http.routers.snubworks.entrypoints=websecure"
+      - "traefik.http.routers.snubworks.tls=true"
+      - "traefik.http.routers.snubworks.tls.certresolver=letsencrypt"
+      - "traefik.http.services.snubworks.loadbalancer.server.port=80"
+
+networks:
+  proxy:
+    external: true

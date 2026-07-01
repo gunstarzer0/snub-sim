@@ -1,0 +1,11 @@
+# SnubWorks — bind the published port to loopback only.
+# Recommended when a reverse proxy on the same host fronts the app: the
+# container is reachable at 127.0.0.1:8081 but NOT exposed on the public
+# interface. Layer it over the base compose:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.loopback.yml up -d --build
+#
+# If 8081 is already taken on the host, change it here (and in the proxy upstream).
+services:
+  snubworks:
+    ports: !override
+      - "127.0.0.1:8081:80"

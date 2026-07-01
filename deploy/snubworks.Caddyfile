@@ -1,0 +1,11 @@
+# SnubWorks — Caddy site block.
+# Append to the existing Caddyfile (host) or the mounted Caddyfile (container),
+# then reload:  caddy reload --config /etc/caddy/Caddyfile
+# (containerized:  docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile)
+#
+# Caddy auto-provisions a Let's Encrypt cert for this hostname, giving you
+# Cloudflare Full (strict) with zero extra cert steps.
+
+snubworks.teamsnubbing.com {
+    reverse_proxy 127.0.0.1:8081
+}
