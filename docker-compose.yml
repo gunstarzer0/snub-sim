@@ -1,0 +1,20 @@
+# SnubWorks — deploy on the TEAMFORCE VPS.
+#
+#   git clone https://github.com/gunstarzer0/snub-sim.git snubworks
+#   cd snubworks
+#   docker compose up -d --build
+#
+# To update after new commits land on the branch you deploy from:
+#   git pull && docker compose up -d --build
+#
+# The app listens on port 8081 on the host by default. Put your existing
+# reverse proxy (the one already fronting TeamForce) in front of it, or
+# change the published port below.
+services:
+  snubworks:
+    build: .
+    image: snubworks:latest
+    container_name: snubworks
+    restart: unless-stopped
+    ports:
+      - "8081:80"

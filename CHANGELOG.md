@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SNUB FORCE are documented here.
+All notable changes to SnubWorks are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/) (pre-1.0: minor = feature round, patch = fixes/balance).
 
 ## [0.4.1] — 2026-06-13

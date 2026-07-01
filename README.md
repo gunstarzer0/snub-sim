@@ -1,4 +1,4 @@
-# SNUB FORCE — Hydraulic Workover / Snubbing Simulator
+# SnubWorks — Hydraulic Workover / Snubbing Simulator
 
 An arcade-style 3D simulation of **hydraulic workover (snubbing) operations**: stripping pipe into and out of a live, pressurized well using a hydraulic jack, two sets of slips, and careful wellhead pressure management.
 
@@ -125,7 +125,7 @@ Example: `feat(levels): add sour-gas event chain to level 4`
 ### Future structure (when it outgrows one file)
 
 ```
-snub-force/
+snubworks/
 ├─ index.html              # shell only
 ├─ src/
 │  ├─ sim/                 # simulation engine (pure logic, testable headless)
@@ -164,6 +164,43 @@ npx http-server . -p 8347
 ```
 
 Requires WebGL and an internet connection for the Three.js CDN.
+
+## Deployment (Docker, on the TEAMFORCE VPS)
+
+SnubWorks ships as a static single-file app served by nginx in a container —
+the same pattern as the TeamForce app on the VPS.
+
+```sh
+# on TEAMFORCE, first time:
+git clone https://github.com/gunstarzer0/snub-sim.git snubworks
+cd snubworks
+docker compose up -d --build
+
+# to update after new commits:
+git pull && docker compose up -d --build
+```
+
+The container publishes on host port **8081** (`docker-compose.yml`). Point your
+existing reverse proxy (the one already fronting TeamForce) at
+`http://127.0.0.1:8081`, or change the published port to suit.
+
+Example nginx reverse-proxy server block on the host:
+
+```nginx
+server {
+    server_name snubworks.example.com;   # your domain / subdomain
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # add TLS with: certbot --nginx -d snubworks.example.com
+}
+```
+
+Health check: the image reports container health via `GET /`. Verify with
+`docker ps` (look for `healthy`) or `curl -I http://127.0.0.1:8081`.
 
 ## License
 
