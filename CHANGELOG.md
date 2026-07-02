@@ -3,7 +3,59 @@
 All notable changes to SnubWorks are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/) (pre-1.0: minor = feature round, patch = fixes/balance).
 
-## [0.4.1] — 2026-06-13
+> **Versioning reset.** The app was renamed SNUB FORCE → SnubWorks and moved
+> to production (TEAMFORCE VPS, `snubworks.teamsnubbing.com`) at this point.
+> Version numbering restarts at 0.1.0; the SNUB FORCE 0.1–0.6 history below is
+> prologue, kept for reference.
+
+## [0.2.0] — 2026-07-02
+
+Visual/physics fixes to the v0.1.0 gin-pole rework, requested after seeing it
+live: the crane and mast bracing were clipping through the basket.
+
+### Fixed
+- **Winch now hangs from the gin pole itself** — removed the separate,
+  disconnected boom/tip/brace/sheave assembly; the winch line hangs from
+  `GIN_CROWN`, the crown sheave at the actual top of the mast (the tallest
+  object on the rig), instead of a floating structure beside it.
+- **Basket clipping** — removed the ground guy wires and low A-frame braces
+  that cut straight through the basket rails and floor; the gin pole is now
+  self-supporting, integrated into the package (no ground rigging).
+- **Solid-floor clipping** — added a `framedFloor()` helper that cuts a real
+  1.7×1.7 bore hole through both the structural basket floor and the grating
+  overlay, so the pipe/joint/tongs passing through the well centre no longer
+  punch through "solid" deck.
+
+### Added
+- **Power tongs** — a second, shorter tong arm at the back-left basket
+  corner carries a red power-tong body (hydraulic side arm + jaw plates)
+  that swings in on a pivot to engage the pipe whenever a connection is
+  being made or broken (`X`), easing back to parked the rest of the time.
+
+## [0.1.0] — 2026-07-02
+
+First SnubWorks-branded release, deployed to production on the TEAMFORCE VPS.
+
+### Added
+- Rebrand: SNUB FORCE → **SnubWorks** (title, topbar, title card, docs).
+- **PIN access gate** (default `8326`), TeamForce-style overlay; unlocks per
+  browser session via `sessionStorage`.
+- **Skip Tutorial** — button on the title screen and inside the tutorial
+  overlay itself.
+- **Dev pressure-freeze button** (topbar) — halts wellhead pressure drift,
+  surge/swab, kick escalation, and event ramps so other systems can be
+  tested without fighting the gauge. Toggle + toast feedback.
+- Initial gin-pole/BOP visual pass toward the reference rig photo: red
+  christmas-tree livery on the BOP/annular stack, gate-valve handwheels,
+  and a tall single mast replacing the two short angled poles (refined
+  further in 0.2.0 after clipping was spotted live).
+- **Versioning** — `VERSION` constant rendered bottom-right; this file
+  going forward. major.minor.patch: patch = fixes/tuning, minor = feature
+  round, major = breaking/structural overhaul.
+- Docker/Caddy production deployment on the TEAMFORCE VPS, alongside
+  TeamForce, at `https://snubworks.teamsnubbing.com` (see `deploy/DEPLOY.md`).
+
+## [0.4.1] — 2026-06-13 (SNUB FORCE)
 
 Visual QA & realism tuning of the 0.4.0 additions. Positions/scales/rotations only — no new systems.
 
