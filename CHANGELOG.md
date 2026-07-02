@@ -8,6 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Ver
 > Version numbering restarts at 0.1.0; the SNUB FORCE 0.1–0.6 history below is
 > prologue, kept for reference.
 
+## [0.3.1] — 2026-07-02
+
+Refinement pass on the 0.3.0 visuals. No physics/anchor changes.
+
+### Changed
+- **Black + yellow unit palette** — structural steel (legs, floors, frames,
+  mast, tong body) black; accents (jack barrels, tong arm, toolbox) yellow;
+  **red is now BOP-stack-only**; guy wires stay gray.
+- **Gin pole relocated to the basket rear** — it was coaxial with the tubing
+  (pipe ran through it). Mast now on the rear rim with a cantilever jib
+  carrying the crown sheave to just behind the bore; guy stays follow. No JH
+  waypoint changes (sheavePos tracks GIN_CROWN).
+- **Work light on the jib** — fixture rides the jib underside; light is a
+  targeted shadow-free SpotLight aimed down the tubing.
+- **Tong rest + engage animation** — tongs stow ON the deck (right side) and,
+  during make/break, rise ~1.1 above the floor, swing in to clamp the tubing
+  with a torque pulse, then reverse home. Driven by the existing
+  connecting/breaking states.
+
 ## [0.3.0] — 2026-07-02
 
 Visual-fidelity pass: the rig now reads component-by-component as a real HWO
