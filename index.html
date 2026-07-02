@@ -811,7 +811,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // hydraulic cylinders (barrels fixed, rods extend to traveling head) —
   // bold orange barrels + chrome rods: the signature HWO assembly
   for(const sx of [-1,1]) for(const sz of [-1,1]){
-    const barrel=cyl(0.27,0.27,2.9,M.orange); barrel.position.set(sx*1.25,5.5+1.45,sz*1.25);
+    const barrel=cyl(0.27,0.27,2.9,M.yellow); barrel.position.set(sx*1.25,5.5+1.45,sz*1.25);
     shadowed(barrel); rig.add(barrel);
     const rodMat=M.chrome.clone(); rodGlowMats.push(rodMat);
     const rod=cyl(0.11,0.11,1,rodMat); rig.add(rod);
@@ -822,13 +822,13 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // y12.4 clears the traveling head's max stroke, plate top 11.9 / cheeks 12.11)
   {
     const m4=new THREE.Matrix4();
-    const colIM=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07,0.07,6.85,10),M.steelDk,4);
+    const colIM=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07,0.07,6.85,10),M.black,4);
     let ci=0;
     for(const sx of [-1,1]) for(const sz of [-1,1]){
       m4.makeTranslation(sx*1.85,5.55+6.85/2,sz*1.85); colIM.setMatrixAt(ci++,m4);
     }
     colIM.castShadow=true; rig.add(colIM);
-    const beamIM=new THREE.InstancedMesh(new THREE.BoxGeometry(3.86,0.16,0.16),M.steelDk,4);
+    const beamIM=new THREE.InstancedMesh(new THREE.BoxGeometry(3.86,0.16,0.16),M.black,4);
     const q=new THREE.Quaternion(), yAx=new THREE.Vector3(0,1,0), one=new THREE.Vector3(1,1,1);
     [[0,1.85,0],[0,-1.85,0],[1.85,0,Math.PI/2],[-1.85,0,Math.PI/2]].forEach((b,i)=>{
       q.setFromAxisAngle(yAx,b[2]);
@@ -849,7 +849,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // TRAVELING frame identity: orange cheek plates flanking the plate + rod
   // guide sleeves (instanced, in travHead local space so they ride the stroke)
   for(const s of [-1,1]){
-    const cheek=box(0.18,0.62,3.3,M.orange); cheek.position.set(s*1.70,0.05,0);
+    const cheek=box(0.18,0.62,3.3,M.black); cheek.position.set(s*1.70,0.05,0);
     shadowed(cheek); travHead.add(cheek);
   }
   {
@@ -863,10 +863,10 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // work basket (fixed) + legs + gin pole
   const bY=BASKET_Y;
   for(const sx of [-1,1]) for(const sz of [-1,1]){
-    const leg=cyl(0.09,0.09,bY-5.55,M.steelDk); leg.position.set(sx*2.05,(bY+5.55)/2,sz*2.05);
+    const leg=cyl(0.09,0.09,bY-5.55,M.black); leg.position.set(sx*2.05,(bY+5.55)/2,sz*2.05);
     rig.add(leg);
   }
-  const floor=framedFloor(4.8,1.7,0.18,M.steelDk); floor.position.y=bY; rig.add(floor);
+  const floor=framedFloor(4.8,1.7,0.18,M.black); floor.position.y=bY; rig.add(floor);
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     const post=cyl(0.05,0.05,1.1,M.rail); post.position.set(sx*2.3,bY+0.62,sz*2.3); rig.add(post);
   }
@@ -880,7 +880,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // GIN_CROWN so the joint-handling winch can hang its line from the actual
   // tallest point of the rig instead of a disconnected boom.
   const mastTop=bY+11;
-  const mast=cyl(0.09,0.12,mastTop-bY,M.yellow); mast.position.set(0,(bY+mastTop)/2,0);
+  const mast=cyl(0.09,0.12,mastTop-bY,M.black); mast.position.set(0,(bY+mastTop)/2,0);
   shadowed(mast); rig.add(mast);
   const crown=box(0.5,0.42,0.5,M.steelDk); crown.position.set(0,mastTop,0); shadowed(crown); rig.add(crown);
   const crownSheave=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.05,8,16),M.chrome);
@@ -890,7 +890,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // tong arm — a second, shorter pole off the basket rail (opposite corner
   // from the pipe rack) carrying the power tongs used to make/break connections
   const tongBase={x:-2.1,y:bY,z:-2.1}, tongPoleH=2.5;   // back-left corner, clear of the corner post
-  const tongPole=cyl(0.06,0.08,tongPoleH,M.steel);
+  const tongPole=cyl(0.06,0.08,tongPoleH,M.black);
   tongPole.position.set(tongBase.x,bY+tongPoleH/2,tongBase.z); shadowed(tongPole); rig.add(tongPole);
   const tongPivotPos={x:tongBase.x,y:bY+tongPoleH,z:tongBase.z};
   const tongRadius=Math.hypot(tongPivotPos.x,tongPivotPos.z);
@@ -899,8 +899,8 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   const tongPivot=new THREE.Group(); tongPivot.position.set(tongPivotPos.x,tongPivotPos.y,tongPivotPos.z);
   tongPivot.rotation.y=tongParkAngle; rig.add(tongPivot);
   const tongBody=new THREE.Group(); tongBody.position.set(tongRadius,0,0); tongPivot.add(tongBody);
-  const thouse=box(0.9,0.4,0.55,M.red); shadowed(thouse); tongBody.add(thouse);
-  const tramA=cyl(0.09,0.09,0.7,M.red); tramA.rotation.z=Math.PI/2; tramA.position.set(-0.55,0.15,0);
+  const thouse=box(0.9,0.4,0.55,M.black); shadowed(thouse); tongBody.add(thouse);
+  const tramA=cyl(0.09,0.09,0.7,M.yellow); tramA.rotation.z=Math.PI/2; tramA.position.set(-0.55,0.15,0);
   shadowed(tramA); tongBody.add(tramA);
   const tjawL=box(0.16,0.3,0.5,M.steelDk); tjawL.position.set(0.5,-0.05,0.18); tongBody.add(tjawL);
   const tjawR=tjawL.clone(); tjawR.position.z=-0.18; tongBody.add(tjawR);
@@ -1009,7 +1009,7 @@ function createBasketDetails(){
     const lever=cyl(0.025,0.025,0.34,M.chrome); lever.position.set(-0.36+i*0.24,0.95,0.3);
     lever.rotation.x=-0.4-(i%2)*0.3; con.add(lever);
     const knob=new THREE.Mesh(new THREE.SphereGeometry(0.05,8,6),
-      i%2? M.red : M.yellow); knob.position.set(-0.36+i*0.24,1.1,0.42); con.add(knob);
+      i%2? M.black : M.yellow); knob.position.set(-0.36+i*0.24,1.1,0.42); con.add(knob);
   }
   for(let i=0;i<3;i++){
     const c=[0x3ddc7a,0xffd23d,0xff4d4d][i];
@@ -1020,8 +1020,8 @@ function createBasketDetails(){
   // hose bundle draped from the console down to the deck
   rig.add(tube([[-1.9,bY+0.4,-1.4],[-2.1,bY+0.15,-0.6],[-1.8,bY+0.1,0.4],[-1.4,bY+0.12,1.2]],0.06,M.hose));
   rig.add(tube([[-1.7,bY+0.45,-1.5],[-2.0,bY+0.2,-0.7],[-1.6,bY+0.12,0.3],[-1.2,bY+0.12,1.0]],0.05,M.hose));
-  // red toolbox in a corner
-  const tbox=box(0.9,0.45,0.5,M.red); tbox.position.set(1.5,bY+0.34,-1.6); shadowed(tbox); rig.add(tbox);
+  // toolbox in a corner (yellow — red is BOP-only livery)
+  const tbox=box(0.9,0.45,0.5,M.yellow); tbox.position.set(1.5,bY+0.34,-1.6); shadowed(tbox); rig.add(tbox);
   const tlid=box(0.92,0.08,0.52,M.steelDk); tlid.position.set(1.5,bY+0.6,-1.6); rig.add(tlid);
   // small deck work lights on the corner posts
   for(const sx of [-1,1]) for(const sz of [-1,1]){
