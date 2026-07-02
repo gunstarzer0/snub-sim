@@ -623,8 +623,8 @@ const M = {
   steel: new THREE.MeshStandardMaterial({color:0x7e8aa0, roughness:.45, metalness:.75}),
   steelDk: new THREE.MeshStandardMaterial({color:0x49525f, roughness:.55, metalness:.7}),
   chrome: new THREE.MeshStandardMaterial({color:0xd9e2ec, roughness:.12, metalness:.95}),
-  orange: new THREE.MeshStandardMaterial({color:0xe07818, roughness:.5, metalness:.4}),
-  red:   new THREE.MeshStandardMaterial({color:0xb4332a, roughness:.5, metalness:.5}),
+  orange: new THREE.MeshStandardMaterial({color:0xe07818, roughness:.42, metalness:.35}),  // painted steel
+  red:   new THREE.MeshStandardMaterial({color:0xb4332a, roughness:.45, metalness:.4}),    // painted steel
   redRust:new THREE.MeshStandardMaterial({color:0x8f2f24, roughness:.78, metalness:.35}),
   pipe:  new THREE.MeshStandardMaterial({color:0x9aa6b4, roughness:.3, metalness:.85}),
   collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
@@ -1439,6 +1439,13 @@ function createIntermediatePlatform(){
   const rungs=new THREE.InstancedMesh(new THREE.BoxGeometry(0.55,0.05,0.05),M.rail,rungRuns.length);
   rungRuns.forEach(([ry,rz],i)=>{ m4.makeTranslation(0,ry,rz); rungs.setMatrixAt(i,m4); });
   rig.add(rungs);
+  // hazard-striped kickplates around the platform edge
+  const kicks=new THREE.InstancedMesh(new THREE.BoxGeometry(5.66,0.26,0.05),hazMat,4);
+  [[0,2.82,0],[0,-2.82,0],[2.82,0,Math.PI/2],[-2.82,0,Math.PI/2]].forEach((k,i)=>{
+    q.setFromAxisAngle(yAx,k[2]);
+    m4.compose(new THREE.Vector3(k[0],pY+0.19,k[1]),q,one); kicks.setMatrixAt(i,m4);
+  });
+  rig.add(kicks);
 }
 
 // --- hose & cable bundles: HPU ground runs up the back-left corner ---
