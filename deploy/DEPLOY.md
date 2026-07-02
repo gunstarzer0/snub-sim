@@ -40,7 +40,8 @@ docker inspect "$CADDY" -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\
 ```
 
 Record: the Caddy **container name**, its **network name** (e.g.
-`teamforce-git_default`), and the **path** its Caddyfile is mounted from
+`teamforce-git_proxy` — this is Caddy's network, NOT `teamforce-git_default`),
+and the **path** its Caddyfile is mounted from
 (should be `/opt/teamforce-git/deploy/Caddyfile`). Confirm no container already
 uses the name `snubworks`.
 
@@ -55,7 +56,7 @@ cd /opt/snubworks-git
 git checkout main
 
 # tell the prod override which network TeamForce's Caddy is on
-echo "CADDY_NETWORK=<network-from-step-1>" > .env      # e.g. teamforce-git_default
+echo "CADDY_NETWORK=<network-from-step-1>" > .env      # TEAMFORCE: teamforce-git_proxy
 ```
 
 ---

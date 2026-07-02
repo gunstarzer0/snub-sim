@@ -10,7 +10,9 @@
 #
 # Set CADDY_NETWORK to the network TeamForce's Caddy is on (see deploy/DEPLOY.md
 # step 1 for how to find it). Put it in a .env file next to this compose:
-#   echo "CADDY_NETWORK=teamforce-git_default" > .env
+#   echo "CADDY_NETWORK=teamforce-git_proxy" > .env
+# (On the TEAMFORCE droplet the Caddy container is on `teamforce-git_proxy`,
+#  NOT `teamforce-git_default` — the app must join Caddy's network to be routed.)
 services:
   snubworks:
     # no host ports in prod — Caddy reaches the container over the shared network
@@ -21,4 +23,4 @@ services:
 networks:
   proxy:
     external: true
-    name: ${CADDY_NETWORK:-teamforce-git_default}
+    name: ${CADDY_NETWORK:-teamforce-git_proxy}
