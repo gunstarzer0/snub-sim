@@ -771,13 +771,33 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     const wl=box(0.46,0.34,0.46,M.snub); wl.position.set(s*0.32,5.6,0); shadowed(wl);
     stack.add(wl); statLW.push({m:wl,side:s});
   }
-  // hydraulic cylinders (barrels fixed, rods extend to traveling head)
+  // hydraulic cylinders (barrels fixed, rods extend to traveling head) —
+  // bold orange barrels + chrome rods: the signature HWO assembly
   for(const sx of [-1,1]) for(const sz of [-1,1]){
-    const barrel=cyl(0.24,0.24,2.9,M.steel); barrel.position.set(sx*1.25,5.5+1.45,sz*1.25);
+    const barrel=cyl(0.27,0.27,2.9,M.orange); barrel.position.set(sx*1.25,5.5+1.45,sz*1.25);
     shadowed(barrel); rig.add(barrel);
     const rodMat=M.chrome.clone(); rodGlowMats.push(rodMat);
     const rod=cyl(0.11,0.11,1,rodMat); rig.add(rod);
     rods.push({rod,x:sx*1.25,z:sz*1.25,baseTop:5.5+2.9});
+  }
+  // STATIONARY frame: corner columns off the base plate + top spreader ring
+  // (columns at ±1.85 clear the traveling frame's swept envelope; spreader at
+  // y12.4 clears the traveling head's max stroke, plate top 11.9 / cheeks 12.11)
+  {
+    const m4=new THREE.Matrix4();
+    const colIM=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07,0.07,6.85,10),M.steelDk,4);
+    let ci=0;
+    for(const sx of [-1,1]) for(const sz of [-1,1]){
+      m4.makeTranslation(sx*1.85,5.55+6.85/2,sz*1.85); colIM.setMatrixAt(ci++,m4);
+    }
+    colIM.castShadow=true; rig.add(colIM);
+    const beamIM=new THREE.InstancedMesh(new THREE.BoxGeometry(3.86,0.16,0.16),M.steelDk,4);
+    const q=new THREE.Quaternion(), yAx=new THREE.Vector3(0,1,0), one=new THREE.Vector3(1,1,1);
+    [[0,1.85,0],[0,-1.85,0],[1.85,0,Math.PI/2],[-1.85,0,Math.PI/2]].forEach((b,i)=>{
+      q.setFromAxisAngle(yAx,b[2]);
+      m4.compose(new THREE.Vector3(b[0],12.4,b[1]),q,one); beamIM.setMatrixAt(i,m4);
+    });
+    beamIM.castShadow=true; rig.add(beamIM);
   }
   // traveling head + traveling slip station (heavy above, snub inverted below)
   travHead=new THREE.Group(); rig.add(travHead);
@@ -788,6 +808,20 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     travHead.add(wh); travHW.push({m:wh,side:s});
     const wl=box(0.42,0.32,0.42,M.snub); wl.position.set(s*0.3,0.18,0); shadowed(wl);
     travHead.add(wl); travLW.push({m:wl,side:s});
+  }
+  // TRAVELING frame identity: orange cheek plates flanking the plate + rod
+  // guide sleeves (instanced, in travHead local space so they ride the stroke)
+  for(const s of [-1,1]){
+    const cheek=box(0.18,0.62,3.3,M.orange); cheek.position.set(s*1.70,0.05,0);
+    shadowed(cheek); travHead.add(cheek);
+  }
+  {
+    const slIM=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16,0.16,0.5,12),M.steelDk,4);
+    const m4=new THREE.Matrix4(); let i=0;
+    for(const sx of [-1,1]) for(const sz of [-1,1]){
+      m4.makeTranslation(sx*1.25,0,sz*1.25); slIM.setMatrixAt(i++,m4);
+    }
+    travHead.add(slIM);
   }
   // work basket (fixed) + legs + gin pole
   const bY=BASKET_Y;
