@@ -8,6 +8,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Ver
 > Version numbering restarts at 0.1.0; the SNUB FORCE 0.1–0.6 history below is
 > prologue, kept for reference.
 
+## [0.3.0] — 2026-07-02
+
+Visual-fidelity pass: the rig now reads component-by-component as a real HWO
+snubbing stack, keeping the low-poly style. No physics/gameplay changes; all
+anchor points (slip heights, stroke, BOP envelope, JH waypoints) untouched.
+
+### Added
+- **Guy wires / tag lines** — 11 instanced cables (4 crown stays to the rail
+  corner posts, 7 ground guys to instanced deadman anchors), routed so nothing
+  crosses a rail or overhangs the cutaway.
+- **Jack frames** — bold-orange cylinders + chrome rods; instanced stationary
+  frame (corner columns + top spreader) and a traveling frame (cheek plates +
+  instanced rod-guide sleeves) that visibly rides the stroke.
+- **BOP stack articulation** — casing head, drilling spool with side outlets,
+  bolted inter-ram flanges, 32 instanced flange bolts, weathered `redRust`
+  lower stack, cellar collar walls around the base.
+- **BOP-access platform (y≈5.6)** — railed grating landing around the jack
+  base with hazard kickplates, plus ground→platform and platform→basket
+  ladders (instanced rungs).
+- **Hose & cable bundles** — three tube runs from the HPU ground lines up the
+  back-left corner into the jack and basket console.
+- **Work lighting** — mast floodlight fixture + warm shadow-free point light
+  over the basket (sun remains the only shadow caster).
+
+### Changed
+- Orange/red materials tuned toward painted steel (lower roughness/metalness).
+
+Perf: ~+27 mesh draw calls + 10 InstancedMesh + 1 non-shadow light for the
+whole pass; repeated parts (cables, bolts, posts, rails, rungs, sleeves,
+columns) are all instanced.
+
 ## [0.2.0] — 2026-07-02
 
 Visual/physics fixes to the v0.1.0 gin-pole rework, requested after seeing it
