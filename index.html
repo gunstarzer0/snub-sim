@@ -625,6 +625,7 @@ const M = {
   chrome: new THREE.MeshStandardMaterial({color:0xd9e2ec, roughness:.12, metalness:.95}),
   orange: new THREE.MeshStandardMaterial({color:0xe07818, roughness:.5, metalness:.4}),
   red:   new THREE.MeshStandardMaterial({color:0xb4332a, roughness:.5, metalness:.5}),
+  redRust:new THREE.MeshStandardMaterial({color:0x8f2f24, roughness:.78, metalness:.35}),
   pipe:  new THREE.MeshStandardMaterial({color:0x9aa6b4, roughness:.3, metalness:.85}),
   collar:new THREE.MeshStandardMaterial({color:0xc9a13a, roughness:.35, metalness:.8}),
   rail:  new THREE.MeshStandardMaterial({color:0xd8b53a, roughness:.6, metalness:.3}),
@@ -737,8 +738,17 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   // wellhead / BOP stack
   const stack=new THREE.Group(); rig.add(stack);
   const add=(m,y)=>{m.position.y=y; shadowed(m); stack.add(m); return m;};
-  add(cyl(1.15,1.15,0.3,M.steelDk),0.18);
-  add(cyl(0.72,0.78,1.0,M.red),0.85);               // lower spool — red christmas-tree livery
+  add(cyl(1.15,1.15,0.3,M.steelDk),0.18);           // base plate on the cellar floor
+  // casing head + drilling spool (weathered/rusted lower stack)
+  add(cyl(0.9,1.0,0.35,M.redRust),0.42);
+  add(cyl(0.95,0.95,0.14,M.redRust),0.62);          // casing-head flange
+  add(cyl(0.72,0.78,0.9,M.redRust),1.1);            // drilling spool
+  for(const s of [-1,1]){                           // spool side outlets + companion flanges
+    const out=cyl(0.18,0.18,0.8,M.redRust); out.rotation.z=Math.PI/2;
+    out.position.set(s*0.75,1.1,0); shadowed(out); stack.add(out);
+    const cf=cyl(0.27,0.27,0.1,M.redRust); cf.rotation.z=Math.PI/2;
+    cf.position.set(s*1.18,1.1,0); stack.add(cf);
+  }
   for(let i=0;i<2;i++){ // ram BOPs (red bodies, per field-standard livery)
     const y=1.75+i*1.25;
     add(box(2.3,1.05,1.5,M.red),y);
@@ -746,6 +756,33 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
       const bonnet=cyl(0.34,0.34,0.8,M.steelDk); bonnet.rotation.z=Math.PI/2;
       bonnet.position.set(s*1.5,y,0); shadowed(bonnet); stack.add(bonnet);
     }
+  }
+  add(cyl(0.85,0.85,0.16,M.red),2.38);              // bolted flange between ram bodies
+  add(cyl(0.85,0.85,0.18,M.red),3.64);              // flange under the annular
+  // instanced flange bolts, 8 per bolted joint
+  {
+    const FLG=[[0.62,0.80],[2.38,0.70],[3.64,0.70],[5.1,1.05]];  // [y, bolt circle r]
+    const bolts=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035,0.035,0.22,6),
+      M.steelDk, FLG.length*8);
+    const m4=new THREE.Matrix4(); let bi=0;
+    for(const [fy,fr] of FLG) for(let k=0;k<8;k++){
+      const a=k*Math.PI/4;
+      m4.makeTranslation(Math.cos(a)*fr,fy,Math.sin(a)*fr);
+      bolts.setMatrixAt(bi++,m4);
+    }
+    stack.add(bolts);
+  }
+  // cellar collar: dark retaining walls around the wellhead base (instanced,
+  // outer edge kept at z<=1.18 so nothing overhangs the cutaway face)
+  {
+    const walls=new THREE.InstancedMesh(new THREE.BoxGeometry(2.9,0.5,0.16),M.matblk,4);
+    const m4=new THREE.Matrix4(), q=new THREE.Quaternion(),
+          yAx=new THREE.Vector3(0,1,0), one=new THREE.Vector3(1,1,1);
+    [[0,-1.8,0],[0,1.1,0],[1.45,-0.35,Math.PI/2],[-1.45,-0.35,Math.PI/2]].forEach((w,i)=>{
+      q.setFromAxisAngle(yAx,w[2]);
+      m4.compose(new THREE.Vector3(w[0],0.28,w[1]),q,one); walls.setMatrixAt(i,m4);
+    });
+    walls.castShadow=true; stack.add(walls);
   }
   // gate-valve handwheels on the lower spool (front face) — reads as a tree
   for(const s of [-1,1]){
