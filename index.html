@@ -1405,8 +1405,45 @@ function createGuyWires(){
   anc.castShadow=true; rig.add(anc);
 }
 
+// --- BOP-access platform (~y5.6) + caged ladders: ground->platform->basket ---
+function createIntermediatePlatform(){
+  const pY=5.62;
+  // railed landing ring around the jack base plate (hole 3.8 clears the
+  // ±1.8 plate, the ±1.85 stationary columns, and the front brand sign)
+  const deck=framedFloor(5.6,3.8,0.12,gratingMat); deck.position.y=pY; rig.add(deck);
+  const m4=new THREE.Matrix4(), q=new THREE.Quaternion(),
+        yAx=new THREE.Vector3(0,1,0), one=new THREE.Vector3(1,1,1);
+  // 8 perimeter posts (corners + edge midpoints)
+  const posts=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.04,0.04,0.9,8),M.rail,8);
+  let pi=0;
+  for(const [px,pz] of [[2.8,2.8],[-2.8,2.8],[2.8,-2.8],[-2.8,-2.8],[2.8,0],[-2.8,0],[0,2.8],[0,-2.8]]){
+    m4.makeTranslation(px,pY+0.51,pz); posts.setMatrixAt(pi++,m4);
+  }
+  rig.add(posts);
+  // 4 top rails
+  const rails=new THREE.InstancedMesh(new THREE.BoxGeometry(5.66,0.06,0.06),M.rail,4);
+  [[0,2.8,0],[0,-2.8,0],[2.8,0,Math.PI/2],[-2.8,0,Math.PI/2]].forEach((r,i)=>{
+    q.setFromAxisAngle(yAx,r[2]);
+    m4.compose(new THREE.Vector3(r[0],pY+0.96,r[1]),q,one); rails.setMatrixAt(i,m4);
+  });
+  rig.add(rails);
+  // ladders: ground -> platform (back face, outside the deck edge) and
+  // platform -> basket (at the basket floor edge)
+  const stringer=(x,y0,y1,z)=>{ const s=box(0.06,y1-y0,0.05,M.rail);
+    s.position.set(x,(y0+y1)/2,z); rig.add(s); };
+  stringer( 0.3,0.3,pY,-2.95); stringer(-0.3,0.3,pY,-2.95);
+  stringer( 0.3,pY,BASKET_Y+0.1,-2.45); stringer(-0.3,pY,BASKET_Y+0.1,-2.45);
+  const rungRuns=[];
+  for(let y=0.65;y<pY-0.15;y+=0.45) rungRuns.push([y,-2.95]);
+  for(let y=pY+0.35;y<BASKET_Y-0.1;y+=0.45) rungRuns.push([y,-2.45]);
+  const rungs=new THREE.InstancedMesh(new THREE.BoxGeometry(0.55,0.05,0.05),M.rail,rungRuns.length);
+  rungRuns.forEach(([ry,rz],i)=>{ m4.makeTranslation(0,ry,rz); rungs.setMatrixAt(i,m4); });
+  rig.add(rungs);
+}
+
 // build everything
 brandTheJack();
+createIntermediatePlatform();
 createBasketDetails();
 createLeasePad();
 createCatwalkAndPipeRack();
