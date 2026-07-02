@@ -896,24 +896,24 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   crownSheave.rotation.y=Math.PI/2; crownSheave.position.set(0,mastTop+0.06,-0.3); rig.add(crownSheave);
   GIN_CROWN = {x:0, y:mastTop+0.06, z:-0.3};
 
-  // tong arm — a second, shorter pole off the basket rail (opposite corner
-  // from the pipe rack) carrying the power tongs used to make/break connections
-  const tongBase={x:-2.1,y:bY,z:-2.1}, tongPoleH=2.5;   // back-left corner, clear of the corner post
-  const tongPole=cyl(0.06,0.08,tongPoleH,M.black);
-  tongPole.position.set(tongBase.x,bY+tongPoleH/2,tongBase.z); shadowed(tongPole); rig.add(tongPole);
-  const tongPivotPos={x:tongBase.x,y:bY+tongPoleH,z:tongBase.z};
-  const tongRadius=Math.hypot(tongPivotPos.x,tongPivotPos.z);
-  const tongEngageAngle=Math.atan2(-tongPivotPos.z,-tongPivotPos.x);  // pivot angle pointing at well centre
-  const tongParkAngle=tongEngageAngle+2.2;                            // swung clear, off to the side
-  const tongPivot=new THREE.Group(); tongPivot.position.set(tongPivotPos.x,tongPivotPos.y,tongPivotPos.z);
-  tongPivot.rotation.y=tongParkAngle; rig.add(tongPivot);
-  const tongBody=new THREE.Group(); tongBody.position.set(tongRadius,0,0); tongPivot.add(tongBody);
-  const thouse=box(0.9,0.4,0.55,M.black); shadowed(thouse); tongBody.add(thouse);
-  const tramA=cyl(0.09,0.09,0.7,M.yellow); tramA.rotation.z=Math.PI/2; tramA.position.set(-0.55,0.15,0);
-  shadowed(tramA); tongBody.add(tramA);
-  const tjawL=box(0.16,0.3,0.5,M.steelDk); tjawL.position.set(0.5,-0.05,0.18); tongBody.add(tjawL);
-  const tjawR=tjawL.clone(); tjawR.position.z=-0.18; tongBody.add(tjawR);
-  GIN_TONGS={pivot:tongPivot,body:tongBody,angle:tongParkAngle,park:tongParkAngle,engage:tongEngageAngle};
+  // power tongs — REST stowed on the RIGHT side of the work floor, sitting
+  // on the deck. Engage path (rise ~man height, swing in to the bore, clamp)
+  // is driven from updateJointHandling; all heights parametrized off BASKET_Y
+  // and the bore centre so physics anchors stay untouched.
+  const TONG_REST={x:1.8,y:bY+0.33,z:0.55};
+  const tong=new THREE.Group();
+  tong.position.set(TONG_REST.x,TONG_REST.y,TONG_REST.z);
+  tong.rotation.y=Math.PI;                        // jaws lead toward well centre
+  rig.add(tong);
+  const thouse=box(0.9,0.4,0.55,M.black); shadowed(thouse); tong.add(thouse);
+  const tramA=cyl(0.09,0.09,0.7,M.yellow); tramA.rotation.z=Math.PI/2;
+  tramA.position.set(-0.55,0.15,0); shadowed(tramA); tong.add(tramA);
+  const tjawL=box(0.16,0.3,0.5,M.steelDk); tjawL.position.set(0.5,-0.05,0.18); tong.add(tjawL);
+  const tjawR=tjawL.clone(); tjawR.position.z=-0.18; tong.add(tjawR);
+  GIN_TONGS={grp:tong, t:0,
+    rest:TONG_REST,
+    lift:{x:TONG_REST.x, y:bY+1.43, z:TONG_REST.z},   // ~1.1 above the deck
+    engage:{x:0.62, y:bY+1.43, z:0}};                 // jaws straddle the tubing
   // beacon
   beaconMat=new THREE.MeshStandardMaterial({color:0x551111, emissive:0xff2020, emissiveIntensity:0});
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.16,12,8),beaconMat);
@@ -1224,15 +1224,22 @@ function updateJointHandling(dt){
   const J=st.jh;
   document.getElementById('btnAddJoint').classList.toggle('active', J.state!=='idle');
 
-  // power tongs on the tong arm: ease toward "engaged" (swung over the well
-  // centre) while making/breaking a connection, otherwise back to "parked"
+  // power tongs: REST (on deck, right side) -> rise to man height -> swing
+  // in to clamp the tubing while making/breaking, then reverse the same path
   if(GIN_TONGS){
+    const T=GIN_TONGS;
     const engaging = J.state==='connecting' || J.state==='breaking';
-    const target = engaging ? GIN_TONGS.engage : GIN_TONGS.park;
-    GIN_TONGS.angle += (target-GIN_TONGS.angle)*Math.min(1,dt*3.2);
-    GIN_TONGS.pivot.rotation.y = GIN_TONGS.angle;
-    const torque = engaging ? Math.sin(performance.now()/60)*0.05 : 0;
-    GIN_TONGS.body.rotation.x = torque;
+    T.t += ((engaging?1:0)-T.t)*Math.min(1,dt*2.0);
+    const e=easeIO(Math.max(0,Math.min(1,T.t)));
+    let p;
+    if(e<0.45){ const k=e/0.45;                       // (a) rise off the deck
+      p={x:T.rest.x, y:lerp(T.rest.y,T.lift.y,k), z:T.rest.z};
+    } else {    const k=(e-0.45)/0.55;                // (b) swing in to the bore
+      p={x:lerp(T.lift.x,T.engage.x,k), y:T.lift.y, z:lerp(T.lift.z,T.engage.z,k)};
+    }
+    T.grp.position.set(p.x,p.y,p.z);
+    // (c) torque pulse about the pipe axis while clamped
+    T.grp.rotation.y=Math.PI + (engaging&&T.t>0.9 ? Math.sin(performance.now()/60)*0.05 : 0);
   }
 
   if(J.state==='idle'){
