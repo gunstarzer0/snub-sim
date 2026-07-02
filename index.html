@@ -1289,12 +1289,58 @@ function updateJointHandling(dt){
   }
 }
 
+// --- guy wires / tag lines: one InstancedMesh of cables + one of anchors ---
+// Routing avoids the v0.2.0 clipping bug: crown stays terminate ON the rail
+// corner posts (never crossing a rail bar), and ground guys start at the
+// basket's OUTER underside edge (x/z ±2.4, outside the ±2.3 rail line) and
+// radiate outward. Front anchors stay at z<=0.8 — on the concrete pad, never
+// floating over the cutaway face.
+function createGuyWires(){
+  const bY=BASKET_Y;
+  const runs=[];
+  // 4 crown stays: gin-pole collar down to the four rail corner-post tops
+  const crownCollar={x:0,y:bY+10.1,z:0};
+  for(const [sx,sz] of [[1,1],[-1,1],[1,-1],[-1,-1]])
+    runs.push([crownCollar,{x:sx*2.3,y:bY+1.18,z:sz*2.3}]);
+  // ground guys: [from basket underside edge] -> [ground anchor]
+  const G=[
+    [[ 2.4,-2.4],[ 7.0,-6.5]], [[-2.4,-2.4],[-7.0,-6.5]],
+    [[ 2.4, 2.4],[ 7.2, 0.8]], [[-2.4, 2.4],[-7.2, 0.8]],
+    [[ 2.4, 0.0],[ 8.2,-2.4]], [[-2.4, 0.0],[-8.2,-2.4]],
+    [[ 0.0,-2.4],[ 0.0,-8.5]],
+  ];
+  for(const [[fx,fz],[ax,az]] of G)
+    runs.push([{x:fx,y:bY-0.06,z:fz},{x:ax,y:0.14,z:az}]);
+
+  const cable=new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.022,0.022,1,5), M.steelDk, runs.length);
+  const mtx=new THREE.Matrix4(), q=new THREE.Quaternion(),
+        up=new THREE.Vector3(0,1,0), dir=new THREE.Vector3(), mid=new THREE.Vector3();
+  runs.forEach(([a,b],i)=>{
+    dir.set(b.x-a.x,b.y-a.y,b.z-a.z);
+    const len=dir.length();
+    mid.set((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);
+    q.setFromUnitVectors(up,dir.normalize());
+    mtx.compose(mid,q,new THREE.Vector3(1,len,1));
+    cable.setMatrixAt(i,mtx);
+  });
+  rig.add(cable);
+  // deadman anchor blocks under the ground guys
+  const anc=new THREE.InstancedMesh(new THREE.BoxGeometry(0.4,0.24,0.4),M.rail,G.length);
+  G.forEach(([_,[ax,az]],i)=>{
+    mtx.compose(new THREE.Vector3(ax,0.12,az),new THREE.Quaternion(),new THREE.Vector3(1,1,1));
+    anc.setMatrixAt(i,mtx);
+  });
+  anc.castShadow=true; rig.add(anc);
+}
+
 // build everything
 brandTheJack();
 createBasketDetails();
 createLeasePad();
 createCatwalkAndPipeRack();
 createJointHandlingSystem();
+createGuyWires();
 
 /* ============ 5. PARTICLES — gas, sparks, motion streaks ============ */
 const dotTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=64;
