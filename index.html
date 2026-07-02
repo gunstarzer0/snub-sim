@@ -22,9 +22,12 @@
   #topbar .ttl{font-weight:800;letter-spacing:2px;color:var(--acc);font-size:15px;}
   #topbar .stat{font-size:13px;opacity:.9;}
   #topbar .stat b{color:#fff;font-size:15px;}
-  #sndBtn,#pauseBtn{background:none;border:1px solid var(--line);color:var(--txt);border-radius:8px;
+  #sndBtn,#pauseBtn,#freezeBtn{background:none;border:1px solid var(--line);color:var(--txt);border-radius:8px;
     padding:4px 10px;cursor:pointer;font-size:15px;}
-  #sndBtn:hover,#pauseBtn:hover{border-color:var(--acc);}
+  #sndBtn:hover,#pauseBtn:hover,#freezeBtn:hover{border-color:var(--acc);}
+  #freezeBtn.on{background:#2a6b9c;border-color:#7ec8ff;color:#eaf6ff;}
+  #verTag{position:fixed;right:10px;bottom:8px;z-index:6;font-size:11px;font-family:Consolas,monospace;
+    color:var(--acc2);opacity:.6;pointer-events:none;letter-spacing:.5px;}
   #hudObj{color:var(--acc2);font-weight:700;}
   /* left diagram */
   #diagPanel{left:12px;top:70px;padding:8px;z-index:4;}
@@ -129,6 +132,7 @@
   <span class="stat">RACK <b id="hudRack" class="mono">10</b></span>
   <span class="stat">CONN <b id="hudConn" class="mono">0</b></span>
   <span class="stat" id="hudObj">SNUB IN → 240 ft</span>
+  <button id="freezeBtn" title="Freeze wellhead pressure (dev)">❄</button>
   <button id="pauseBtn" title="Pause (Esc)">⏸</button>
   <button id="sndBtn" title="Toggle sound (M)">🔊</button>
 </div>
@@ -253,6 +257,7 @@
     <p style="text-align:center;opacity:.7;">Manual cycle (snub in): jack up empty → grip TRAVELING → release STATIONARY → jack down → set STATIONARY → release TRAVELING → repeat. Match the slip type to the load — and never close slips on a tool joint.</p>
     <div class="btnrow">
       <button id="btnStart">START SHIFT</button>
+      <button id="btnSkipTut" class="ghost">⏭ SKIP TUTORIAL</button>
       <button id="btnTut" class="ghost">📖 TUTORIAL</button>
       <button id="btnContinue" class="ghost hidden">CONTINUE</button>
     </div>
@@ -296,10 +301,29 @@
     <div id="tutDots"></div>
     <div class="btnrow">
       <button id="tutBack" class="ghost">◀ BACK</button>
+      <button id="tutSkip" class="ghost">⏭ SKIP</button>
       <button id="tutNext">NEXT ▶</button>
     </div>
   </div>
 </div>
+
+<div class="ovl" id="ovlPin" style="z-index:40;">
+  <div class="card" style="max-width:380px;">
+    <h1 style="font-size:26px;">⛽ SNUBWORKS</h1>
+    <h2>Hydraulic Workover Simulator</h2>
+    <p style="text-align:center;">Enter the access PIN to continue.</p>
+    <input id="pinInput" type="password" inputmode="numeric" autocomplete="off"
+      placeholder="Access PIN" maxlength="12"
+      style="width:100%;padding:12px;font-size:18px;text-align:center;letter-spacing:6px;
+      border-radius:8px;border:1px solid var(--line);background:#0c1118;color:var(--txt);margin:6px 0;">
+    <div id="pinErr" style="color:var(--bad);font-size:12px;min-height:16px;"></div>
+    <button id="pinBtn">ENTER</button>
+    <p style="text-align:center;opacity:.55;font-size:11px;margin-top:14px;">PIN access is a temporary
+      measure — not a replacement for identity-based authentication.</p>
+  </div>
+</div>
+
+<div id="verTag"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 <script>
@@ -330,6 +354,12 @@ const BLEED_RATE = 230, PUMP_RATE = 170;
 const Y_SCALE = 0.3;        // world units per ft (surface equipment)
 const CUT_TOP = -1.0, CUT_BOT = -14.0;   // cutaway window (world y)
 const EARTH_D = 15;         // cutaway depth, world units
+
+// SnubWorks versioning — bump on each pass (major.minor.patch).
+// Reset to 0.1.0 at the SnubWorks rebrand; the earlier SNUB FORCE history
+// (0.1–0.6) is prologue.
+const VERSION = 'v0.1.0';
+const APP_PIN = '8326';     // temporary access gate (see ovlPin)
 
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
@@ -490,6 +520,7 @@ const st = {
   jointsDone:0, lastJoints:0, levelT:0, pipeV:0, lockWarnT:0,
   failing:false, failAnimT:0, failReason:'', shake:0,
   held:{up:false,dn:false,bleed:false,pump:false,annDn:false,annUp:false},
+  freezeP:false,                 // dev: hold wellhead pressure steady
 };
 Object.assign(st, makeJointTable(300));
 
@@ -690,16 +721,23 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
   const stack=new THREE.Group(); rig.add(stack);
   const add=(m,y)=>{m.position.y=y; shadowed(m); stack.add(m); return m;};
   add(cyl(1.15,1.15,0.3,M.steelDk),0.18);
-  add(cyl(0.72,0.78,1.0,M.steel),0.85);
-  for(let i=0;i<2;i++){ // ram BOPs
+  add(cyl(0.72,0.78,1.0,M.red),0.85);               // lower spool — red christmas-tree livery
+  for(let i=0;i<2;i++){ // ram BOPs (red bodies, per field-standard livery)
     const y=1.75+i*1.25;
-    add(box(2.3,1.05,1.5,M.steel),y);
+    add(box(2.3,1.05,1.5,M.red),y);
     for(const s of [-1,1]){
-      const bonnet=cyl(0.34,0.34,0.8,M.red); bonnet.rotation.z=Math.PI/2;
+      const bonnet=cyl(0.34,0.34,0.8,M.steelDk); bonnet.rotation.z=Math.PI/2;
       bonnet.position.set(s*1.5,y,0); shadowed(bonnet); stack.add(bonnet);
     }
   }
-  add(cyl(0.95,0.95,1.1,M.steel),4.3);              // annular body
+  // gate-valve handwheels on the lower spool (front face) — reads as a tree
+  for(const s of [-1,1]){
+    const vw=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.05,8,18),M.red);
+    vw.position.set(s*1.15,1.0,0.85); shadowed(vw); stack.add(vw);
+    const stem=cyl(0.05,0.05,0.7,M.steel); stem.rotation.x=Math.PI/2;
+    stem.position.set(s*1.15,1.0,0.5); stack.add(stem);
+  }
+  add(cyl(0.95,0.95,1.1,M.red),4.3);                // annular body — red
   const dome=new THREE.Mesh(new THREE.SphereGeometry(0.95,24,12,0,Math.PI*2,0,Math.PI/2),M.steelDk);
   add(dome,4.85);
   add(cyl(1.25,1.25,0.22,M.steelDk),5.1);           // top flange
@@ -748,8 +786,27 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     const r1=box(4.7,0.07,0.07,M.rail); r1.position.set(0,bY+1.15,s*2.3); rig.add(r1);
     const r2=box(0.07,0.07,4.7,M.rail); r2.position.set(s*2.3,bY+1.15,0); rig.add(r2);
   }
-  const pole=cyl(0.07,0.07,4.2,M.steel); pole.position.set(1.4,bY+3.1,0); pole.rotation.z=-0.32; rig.add(pole);
-  const pole2=pole.clone(); pole2.position.x=-1.4; pole2.rotation.z=0.32; rig.add(pole2);
+  // tall gin pole / mast rising from the basket, guyed to ground anchors
+  const mastTop=bY+11;
+  const mast=cyl(0.09,0.12,mastTop-bY,M.yellow); mast.position.set(0,(bY+mastTop)/2,0);
+  shadowed(mast); rig.add(mast);
+  // crown block + sheave at the mast head
+  const crown=box(0.5,0.42,0.5,M.steelDk); crown.position.set(0,mastTop,0); shadowed(crown); rig.add(crown);
+  const crownSheave=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.05,8,16),M.chrome);
+  crownSheave.rotation.y=Math.PI/2; crownSheave.position.set(0,mastTop+0.08,0.3); rig.add(crownSheave);
+  // two A-frame back-legs bracing the mast to the basket rail
+  for(const s of [-1,1]){
+    const leg=cyl(0.05,0.05,6.6,M.steel); leg.position.set(s*1.15,bY+3.3,-0.9);
+    leg.rotation.z=s*0.16; leg.rotation.x=0.13; shadowed(leg); rig.add(leg);
+  }
+  // guy wires from just below the crown down to four ground anchors
+  const guyMat=new THREE.LineBasicMaterial({color:0x272c33});
+  const gTop=new THREE.Vector3(0,mastTop-0.9,0);
+  for(const [ax,az] of [[4.2,-4.2],[-4.2,-4.2],[4.2,3.0],[-4.2,3.0]]){
+    const gg=new THREE.BufferGeometry().setFromPoints([gTop,new THREE.Vector3(ax,0.12,az)]);
+    rig.add(new THREE.Line(gg,guyMat));
+    const anc=box(0.34,0.22,0.34,M.rail); anc.position.set(ax,0.12,az); shadowed(anc); rig.add(anc);
+  }
   // beacon
   beaconMat=new THREE.MeshStandardMaterial({color:0x551111, emissive:0xff2020, emissiveIntensity:0});
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.16,12,8),beaconMat);
@@ -1718,6 +1775,32 @@ $('btnContinue').onclick=()=>{ AudioFX.init(); beginGame(+(localStorage.getItem(
 $('btnRetry').onclick=()=>{AudioFX.init(); $('ovlFail').classList.add('hidden'); startLevel(st.level);};
 $('btnNext').onclick=()=>{AudioFX.init(); $('ovlWin').classList.add('hidden'); startLevel(st.level+1);};
 
+// skip-tutorial (title) and tutorial-overlay skip both mark it seen and proceed
+$('btnSkipTut').onclick=()=>{ AudioFX.init(); localStorage.setItem('sf_tut','1'); beginGame(1); };
+$('tutSkip').onclick=()=>{ localStorage.setItem('sf_tut','1'); $('ovlTut').classList.add('hidden');
+  if(tutThen){ const f=tutThen; tutThen=null; f(); } };
+
+// dev: freeze wellhead pressure so it doesn't build while we work on other items
+$('freezeBtn').onclick=()=>{ AudioFX.init(); st.freezeP=!st.freezeP;
+  $('freezeBtn').classList.toggle('on',st.freezeP);
+  toast(st.freezeP?'DEV: WELLHEAD PRESSURE FROZEN':'PRESSURE DYNAMICS RESUMED', true); };
+
+// version badge
+$('verTag').textContent = VERSION + ' · SnubWorks';
+
+// PIN access gate (temporary) — clears once per browser session
+(function pinGate(){
+  if(sessionStorage.getItem('sw_pin')==='1'){ $('ovlPin').classList.add('hidden'); return; }
+  const tryPin=()=>{
+    if($('pinInput').value.trim()===APP_PIN){
+      sessionStorage.setItem('sw_pin','1'); $('ovlPin').classList.add('hidden'); $('pinErr').textContent='';
+    } else { $('pinErr').textContent='Incorrect PIN — try again.'; $('pinInput').value=''; $('pinInput').focus(); }
+  };
+  $('pinBtn').onclick=tryPin;
+  $('pinInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); tryPin(); } });
+  $('pinInput').focus();
+})();
+
 /* ============ 9. AUTO SEQUENCER — slip/jack state machine ============ */
 function autoStep(dt){
   if(!st.autoRun){ return 0; }
@@ -1809,7 +1892,7 @@ function update(dt){
       else st.ramps.push({rate:e.dP/e.dur, left:e.dur});   // gasPocket / pressureDrop
     }
   }
-  if(st.ramps.length){
+  if(!st.freezeP && st.ramps.length){
     for(const r of st.ramps){ const step=Math.min(dt,r.left); st.P+=r.rate*step; r.left-=step; }
     st.ramps=st.ramps.filter(r=>r.left>0);
   }
@@ -1894,13 +1977,15 @@ function update(dt){
     }
   } else st.runawayT=0;
 
-  // pressure dynamics
-  st.P += st.drift*dt;                    // gas migration (per level)
-  st.P += st.surge*dDepth;                // surge/swab scales with pipe displacement
+  // pressure dynamics  (dev: st.freezeP holds passive pressure changes)
+  if(!st.freezeP){
+    st.P += st.drift*dt;                  // gas migration (per level)
+    st.P += st.surge*dDepth;              // surge/swab scales with pipe displacement
+  }
   if(st.held.bleed){ st.P=Math.max(0,st.P-BLEED_RATE*dt); }
   if(st.held.pump){ st.P+=PUMP_RATE*dt; }
   if(st.kicking){
-    st.P+=140*dt;
+    if(!st.freezeP) st.P+=140*dt;
     AudioFX.setRumble(0.5);
     if(st.P>st.p0){ st.kicking=false; AudioFX.setRumble(0); toast('KICK CIRCULATED OUT',true); }
   }
