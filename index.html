@@ -643,6 +643,22 @@ const M = {
 const box = (w,h,d,m)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
 const cyl = (rt,rb,h,m,seg=24)=>new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);
 function shadowed(o){ o.castShadow=true; o.receiveShadow=true; return o; }
+// a square floor panel with an open bore hole in the middle (so pipe/tongs/
+// winch line passing through the centre never clip a "solid" deck)
+function framedFloor(outer, hole, thick, mat){
+  const g=new THREE.Group();
+  const rim=(outer-hole)/2;
+  const nsD=rim, nsW=outer;                       // north/south strips: full width
+  const ewD=hole, ewW=rim;                        // east/west strips: fill the side gaps
+  const off=hole/2 + rim/2;
+  for(const z of [off,-off]){
+    const s=shadowed(box(nsW,thick,nsD,mat)); s.position.set(0,0,z); g.add(s);
+  }
+  for(const x of [off,-off]){
+    const s=shadowed(box(ewW,thick,ewD,mat)); s.position.set(x,0,0); g.add(s);
+  }
+  return g;
+}
 
 /* ground + cutaway */
 {
@@ -715,6 +731,7 @@ const tgtLbl = labelSprite('◀ TARGET','#5cf09a'); scene.add(tgtLbl);
 const BASKET_Y = 13.0;            // world Y of the work-basket floor
 const rig = new THREE.Group(); scene.add(rig);
 let travHead, rods=[], beaconMat, rodGlowMats=[];
+let GIN_CROWN=null, GIN_TONGS=null;   // gin-pole crown sheave + tong-arm refs (set below)
 const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
 {
   // wellhead / BOP stack
@@ -778,7 +795,7 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     const leg=cyl(0.09,0.09,bY-5.55,M.steelDk); leg.position.set(sx*2.05,(bY+5.55)/2,sz*2.05);
     rig.add(leg);
   }
-  const floor=shadowed(box(4.8,0.18,4.8,M.steelDk)); floor.position.y=bY; rig.add(floor);
+  const floor=framedFloor(4.8,1.7,0.18,M.steelDk); floor.position.y=bY; rig.add(floor);
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     const post=cyl(0.05,0.05,1.1,M.rail); post.position.set(sx*2.3,bY+0.62,sz*2.3); rig.add(post);
   }
@@ -786,27 +803,37 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     const r1=box(4.7,0.07,0.07,M.rail); r1.position.set(0,bY+1.15,s*2.3); rig.add(r1);
     const r2=box(0.07,0.07,4.7,M.rail); r2.position.set(s*2.3,bY+1.15,0); rig.add(r2);
   }
-  // tall gin pole / mast rising from the basket, guyed to ground anchors
+  // gin pole — tall mast integrated into the package, rising straight up
+  // from the basket floor (self-supporting, no ground guys — those used to
+  // clip straight through the basket rails). Crown position is exposed on
+  // GIN_CROWN so the joint-handling winch can hang its line from the actual
+  // tallest point of the rig instead of a disconnected boom.
   const mastTop=bY+11;
   const mast=cyl(0.09,0.12,mastTop-bY,M.yellow); mast.position.set(0,(bY+mastTop)/2,0);
   shadowed(mast); rig.add(mast);
-  // crown block + sheave at the mast head
   const crown=box(0.5,0.42,0.5,M.steelDk); crown.position.set(0,mastTop,0); shadowed(crown); rig.add(crown);
   const crownSheave=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.05,8,16),M.chrome);
   crownSheave.rotation.y=Math.PI/2; crownSheave.position.set(0,mastTop+0.08,0.3); rig.add(crownSheave);
-  // two A-frame back-legs bracing the mast to the basket rail
-  for(const s of [-1,1]){
-    const leg=cyl(0.05,0.05,6.6,M.steel); leg.position.set(s*1.15,bY+3.3,-0.9);
-    leg.rotation.z=s*0.16; leg.rotation.x=0.13; shadowed(leg); rig.add(leg);
-  }
-  // guy wires from just below the crown down to four ground anchors
-  const guyMat=new THREE.LineBasicMaterial({color:0x272c33});
-  const gTop=new THREE.Vector3(0,mastTop-0.9,0);
-  for(const [ax,az] of [[4.2,-4.2],[-4.2,-4.2],[4.2,3.0],[-4.2,3.0]]){
-    const gg=new THREE.BufferGeometry().setFromPoints([gTop,new THREE.Vector3(ax,0.12,az)]);
-    rig.add(new THREE.Line(gg,guyMat));
-    const anc=box(0.34,0.22,0.34,M.rail); anc.position.set(ax,0.12,az); shadowed(anc); rig.add(anc);
-  }
+  GIN_CROWN = {x:0, y:mastTop+0.08, z:0.3};
+
+  // tong arm — a second, shorter pole off the basket rail (opposite corner
+  // from the pipe rack) carrying the power tongs used to make/break connections
+  const tongBase={x:-2.1,y:bY,z:-2.1}, tongPoleH=2.5;   // back-left corner, clear of the corner post
+  const tongPole=cyl(0.06,0.08,tongPoleH,M.steel);
+  tongPole.position.set(tongBase.x,bY+tongPoleH/2,tongBase.z); shadowed(tongPole); rig.add(tongPole);
+  const tongPivotPos={x:tongBase.x,y:bY+tongPoleH,z:tongBase.z};
+  const tongRadius=Math.hypot(tongPivotPos.x,tongPivotPos.z);
+  const tongEngageAngle=Math.atan2(-tongPivotPos.z,-tongPivotPos.x);  // pivot angle pointing at well centre
+  const tongParkAngle=tongEngageAngle+2.2;                            // swung clear, off to the side
+  const tongPivot=new THREE.Group(); tongPivot.position.set(tongPivotPos.x,tongPivotPos.y,tongPivotPos.z);
+  tongPivot.rotation.y=tongParkAngle; rig.add(tongPivot);
+  const tongBody=new THREE.Group(); tongBody.position.set(tongRadius,0,0); tongPivot.add(tongBody);
+  const thouse=box(0.9,0.4,0.55,M.red); shadowed(thouse); tongBody.add(thouse);
+  const tramA=cyl(0.09,0.09,0.7,M.red); tramA.rotation.z=Math.PI/2; tramA.position.set(-0.55,0.15,0);
+  shadowed(tramA); tongBody.add(tramA);
+  const tjawL=box(0.16,0.3,0.5,M.steelDk); tjawL.position.set(0.5,-0.05,0.18); tongBody.add(tjawL);
+  const tjawR=tjawL.clone(); tjawR.position.z=-0.18; tongBody.add(tjawR);
+  GIN_TONGS={pivot:tongPivot,body:tongBody,angle:tongParkAngle,park:tongParkAngle,engage:tongEngageAngle};
   // beacon
   beaconMat=new THREE.MeshStandardMaterial({color:0x551111, emissive:0xff2020, emissiveIntensity:0});
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.16,12,8),beaconMat);
@@ -890,7 +917,7 @@ function brandTheJack(){
 function createBasketDetails(){
   const bY=BASKET_Y;
   // grating floor laid over the structural floor
-  const grate=box(4.6,0.04,4.6,gratingMat); grate.position.set(0,bY+0.11,0); shadowed(grate); rig.add(grate);
+  const grate=framedFloor(4.6,1.7,0.04,gratingMat); grate.position.set(0,bY+0.11,0); rig.add(grate);
   // yellow toe-boards / kickplates around the deck edge
   for(const s of [-1,1]){
     const kx=box(4.7,0.3,0.08,hazMat); kx.position.set(0,bY+0.27,s*2.3); rig.add(kx);
@@ -1032,22 +1059,11 @@ function createCatwalkAndPipeRack(){
 // --- crane boom + sheave + winch + elevators + animated joint ---
 function createJointHandlingSystem(){
   JH = JH || {};
-  const apex={x:0,y:BASKET_Y+4.6,z:0};
-  const tip ={x:5.4,y:BASKET_Y+4.0,z:-2.6};          // boom tip out over the catwalk, above the lift travel
-  // boom from gin-pole apex out to the tip
-  const boomLen=Math.hypot(tip.x-apex.x,tip.y-apex.y,tip.z-apex.z);
-  const boom=cyl(0.1,0.12,boomLen,M.yellow);
-  boom.position.set((apex.x+tip.x)/2,(apex.y+tip.y)/2,(apex.z+tip.z)/2);
-  boom.lookAt(tip.x,tip.y,tip.z); boom.rotateX(Math.PI/2); shadowed(boom); rig.add(boom);
-  // brace back to the basket
-  const brace=cyl(0.06,0.06,4.2,M.steelDk);
-  brace.position.set(tip.x*0.5,BASKET_Y+1.6,tip.z*0.5); brace.lookAt(tip.x,tip.y,tip.z);
-  brace.rotateX(Math.PI/2); rig.add(brace);
-  // sheave block hanging just under the tip
-  const sheave=new THREE.Group(); sheave.position.set(tip.x,tip.y-0.5,tip.z); rig.add(sheave);
-  const wheel=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.07,8,18),M.steel);
-  wheel.rotation.y=Math.PI/2; sheave.add(wheel);
-  for(const s of [-1,1]){ const pl=box(0.05,0.7,0.4,M.steelDk); pl.position.set(s*0.16,0.1,0); sheave.add(pl); }
+  // the winch line hangs from the gin pole's own crown sheave (the tallest
+  // point on the rig) rather than a separate disconnected boom — no more
+  // floating crane geometry, and the fixed high anchor keeps the line clear
+  // of the basket rails at every waypoint.
+  const sheavePos = {...GIN_CROWN};
   // winch drum at the basket rail
   const drumPos={x:1.4,y:BASKET_Y+0.6,z:-1.4};
   const drum=cyl(0.22,0.22,0.6,M.black); drum.rotation.x=Math.PI/2; drum.position.set(drumPos.x,drumPos.y,drumPos.z);
@@ -1069,7 +1085,7 @@ function createJointHandlingSystem(){
   const lineGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()]);
   const line=new THREE.Line(lineGeo,lineMat); line.visible=false; rig.add(line);
 
-  Object.assign(JH,{ apex, tip, sheavePos:{x:tip.x,y:tip.y-0.5,z:tip.z}, drumPos,
+  Object.assign(JH,{ sheavePos, drumPos,
     elev, joint, jbody, line, lineGeo,
     park:{x:drumPos.x,y:drumPos.y-0.3,z:drumPos.z},
     rest:{x:12.5,y:1.9,z:-6.4},      // top rack joint, world space (rack group offset z=-5)
@@ -1127,6 +1143,17 @@ function updateJointHandling(dt){
   if(!JH) return;
   const J=st.jh;
   document.getElementById('btnAddJoint').classList.toggle('active', J.state!=='idle');
+
+  // power tongs on the tong arm: ease toward "engaged" (swung over the well
+  // centre) while making/breaking a connection, otherwise back to "parked"
+  if(GIN_TONGS){
+    const engaging = J.state==='connecting' || J.state==='breaking';
+    const target = engaging ? GIN_TONGS.engage : GIN_TONGS.park;
+    GIN_TONGS.angle += (target-GIN_TONGS.angle)*Math.min(1,dt*3.2);
+    GIN_TONGS.pivot.rotation.y = GIN_TONGS.angle;
+    const torque = engaging ? Math.sin(performance.now()/60)*0.05 : 0;
+    GIN_TONGS.body.rotation.x = torque;
+  }
 
   if(J.state==='idle'){
     setJhStatus(null);
