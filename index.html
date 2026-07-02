@@ -874,18 +874,27 @@ const travHW=[], travLW=[], statHW=[], statLW=[];   // heavy/snub wedge pairs
     const r1=box(4.7,0.07,0.07,M.rail); r1.position.set(0,bY+1.15,s*2.3); rig.add(r1);
     const r2=box(0.07,0.07,4.7,M.rail); r2.position.set(s*2.3,bY+1.15,0); rig.add(r2);
   }
-  // gin pole — tall mast integrated into the package, rising straight up
-  // from the basket floor (self-supporting, no ground guys — those used to
-  // clip straight through the basket rails). Crown position is exposed on
-  // GIN_CROWN so the joint-handling winch can hang its line from the actual
-  // tallest point of the rig instead of a disconnected boom.
+  // gin pole — tall mast at the REAR edge of the basket (was coaxial with
+  // the tubing, i.e. the pipe ran straight through it). A cantilever jib at
+  // the top carries the crown sheave forward so the lift line drops just
+  // behind the bore. GIN_CROWN feeds the joint-handling winch (JH copies it
+  // at build time — rest/lift/align waypoints unchanged).
   const mastTop=bY+11;
-  const mast=cyl(0.09,0.12,mastTop-bY,M.black); mast.position.set(0,(bY+mastTop)/2,0);
+  const mastZ=-2.1;                                  // rear rim, clear of the -2.3 rail line
+  const mast=cyl(0.09,0.12,mastTop-bY,M.black); mast.position.set(0,(bY+mastTop)/2,mastZ);
   shadowed(mast); rig.add(mast);
-  const crown=box(0.5,0.42,0.5,M.steelDk); crown.position.set(0,mastTop,0); shadowed(crown); rig.add(crown);
+  const mastExt=cyl(0.07,0.07,0.9,M.black); mastExt.position.set(0,mastTop+0.45,mastZ); rig.add(mastExt);
+  // jib: horizontal beam from the mast head forward over the well centre
+  const jib=box(0.1,0.14,1.9,M.black); jib.position.set(0,mastTop,(mastZ-0.3)/2);
+  shadowed(jib); rig.add(jib);
+  // diagonal stay from the mast extension down to the jib tip
+  const stay=cyl(0.03,0.03,Math.hypot(0.85,1.8),M.steelDk);
+  stay.position.set(0,mastTop+0.45,(mastZ-0.35)/2); stay.lookAt(0,mastTop+0.05,-0.35);
+  stay.rotateX(Math.PI/2); rig.add(stay);
+  const crown=box(0.4,0.34,0.4,M.steelDk); crown.position.set(0,mastTop,-0.3); shadowed(crown); rig.add(crown);
   const crownSheave=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.05,8,16),M.chrome);
-  crownSheave.rotation.y=Math.PI/2; crownSheave.position.set(0,mastTop+0.08,0.3); rig.add(crownSheave);
-  GIN_CROWN = {x:0, y:mastTop+0.08, z:0.3};
+  crownSheave.rotation.y=Math.PI/2; crownSheave.position.set(0,mastTop+0.06,-0.3); rig.add(crownSheave);
+  GIN_CROWN = {x:0, y:mastTop+0.06, z:-0.3};
 
   // tong arm — a second, shorter pole off the basket rail (opposite corner
   // from the pipe rack) carrying the power tongs used to make/break connections
@@ -1370,7 +1379,7 @@ function createGuyWires(){
   const bY=BASKET_Y;
   const runs=[];
   // 4 crown stays: gin-pole collar down to the four rail corner-post tops
-  const crownCollar={x:0,y:bY+10.1,z:0};
+  const crownCollar={x:0,y:bY+10.1,z:-2.1};   // mast now at the basket rear rim
   for(const [sx,sz] of [[1,1],[-1,1],[1,-1],[-1,-1]])
     runs.push([crownCollar,{x:sx*2.3,y:bY+1.18,z:sz*2.3}]);
   // ground guys: [from basket underside edge] -> [ground anchor]
