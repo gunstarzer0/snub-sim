@@ -1472,17 +1472,21 @@ function createHoseBundles(){
                 [-2.62,12.7,-2.62],[-2.1,13.5,-2.35],[-1.6,13.42,-1.75]],0.04,M.black));
 }
 
-// --- work lighting: mast flood over the basket (no shadow casting) ---
+// --- work lighting: fixture on the gin-pole jib, aimed down the tubing ---
 function createWorkLighting(){
+  // fixture hangs from the jib underside near the crown (parented to the rig,
+  // positioned on the jib) instead of floating beside the pipe
   const lm=new THREE.MeshStandardMaterial({color:0xfff4d0, emissive:0xffe9a8, emissiveIntensity:2.0});
-  const fix=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.22,0.16),lm);
-  fix.position.set(0.35,BASKET_Y+3.2,0.2); fix.lookAt(0,BASKET_Y+0.5,0); rig.add(fix);
+  const fix=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.2,0.16),lm);
+  fix.position.set(0,BASKET_Y+10.86,-0.7); fix.lookAt(0,BASKET_Y+0.4,0); rig.add(fix);
   flickerMats.push({mat:lm, base:1.9, amt:0.2});
-  // warm point light over the work area — castShadow stays OFF (review
+  // targeted spotlight down the string — castShadow stays OFF (review
   // constraint: no extra shadow maps; the sun remains the only shadow caster)
-  const wl=new THREE.PointLight(0xffd9a0, 26, 13);
-  wl.position.set(0.3,BASKET_Y+3.0,0.3); wl.castShadow=false; rig.add(wl);
-  flickerMats.push({mat:wl, base:24, amt:5, light:true});
+  const wl=new THREE.SpotLight(0xffd9a0, 55, 18, 0.45, 0.6);
+  wl.position.copy(fix.position); wl.castShadow=false;
+  wl.target.position.set(0,BASKET_Y+0.4,0);
+  rig.add(wl); rig.add(wl.target);
+  flickerMats.push({mat:wl, base:50, amt:9, light:true});
 }
 
 // build everything
